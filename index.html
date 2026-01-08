@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多米诺骨牌学习游戏</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="game-container">
+        <header class="game-header">
+            <h1>多米诺骨牌学习游戏</h1>
+            <div class="controls">
+                <button id="resetBtn" class="btn btn-reset">重置</button>
+                <button id="pushBtn" class="btn btn-push">推倒!</button>
+            </div>
+        </header>
+
+        <div class="game-content">
+            <aside class="sidebar">
+                <div class="panel">
+                    <h3>字母骨牌</h3>
+                    <div class="domino-grid" id="letterGrid">
+                        <!-- 字母骨牌由JS生成 -->
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h3>数字骨牌</h3>
+                    <div class="domino-grid" id="numberGrid">
+                        <!-- 数字骨牌由JS生成 -->
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h3>骨牌大小</h3>
+                    <div class="size-selector">
+                        <label>
+                            <input type="radio" name="size" value="small">
+                            <span class="size-option">小</span>
+                        </label>
+                        <label>
+                            <input type="radio" name="size" value="medium" checked>
+                            <span class="size-option">中</span>
+                        </label>
+                        <label>
+                            <input type="radio" name="size" value="large">
+                            <span class="size-option">大</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h3>知名建筑</h3>
+                    <div class="building-grid" id="buildingGrid">
+                        <!-- 建筑由JS生成 -->
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h3>提示</h3>
+                    <p class="hint">1. 点击骨牌放置<br>2. 点击建筑放在最后<br>3. 点击"推倒"看爆炸!</p>
+                </div>
+            </aside>
+
+            <main class="canvas-container">
+                <canvas id="gameCanvas"></canvas>
+                <div class="celebration" id="celebration" hidden>
+                    <div class="celebration-content">
+                        <h2>太棒了!</h2>
+                        <div class="stars">★ ★ ★</div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="js/audio.js"></script>
+    <script src="js/domino.js"></script>
+    <script src="js/building.js"></script>
+    <script src="js/physics.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
