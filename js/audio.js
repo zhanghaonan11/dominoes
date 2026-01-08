@@ -104,11 +104,11 @@ class AudioManager {
     }
 
     /**
-     * 朗读字母（添加一些乐趣）
+     * 朗读字母
      */
     speakLetter(letter, callback) {
-        // 为字母添加一些趣味朗读
-        const text = letter.toUpperCase();
+        // 使用小写字母，避免读成 "capital A"
+        const text = letter.toLowerCase();
         this.speak(text, callback);
     }
 
@@ -116,19 +116,8 @@ class AudioManager {
      * 朗读数字
      */
     speakNumber(number, callback) {
-        const numberWords = {
-            '0': 'zero',
-            '1': 'one',
-            '2': 'two',
-            '3': 'three',
-            '4': 'four',
-            '5': 'five',
-            '6': 'six',
-            '7': 'seven',
-            '8': 'eight',
-            '9': 'nine'
-        };
-        const text = numberWords[number] || number.toString();
+        // 只发音数字本身
+        const text = number.toString();
         this.speak(text, callback);
     }
 
