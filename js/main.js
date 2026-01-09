@@ -542,7 +542,7 @@ class DominoGame {
      * 绘制背景网格
      */
     drawGrid() {
-        this.ctx.strokeStyle = 'rgba(100, 100, 100, 0.1)';
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
         this.ctx.lineWidth = 1;
 
         const gridSize = 50;
@@ -568,7 +568,7 @@ class DominoGame {
     drawGround() {
         const groundY = this.canvas.height - 80;
 
-        this.ctx.strokeStyle = '#8b4513';
+        this.ctx.strokeStyle = '#c9a227';
         this.ctx.lineWidth = 3;
         this.ctx.setLineDash([10, 5]);
         this.ctx.beginPath();
@@ -582,7 +582,7 @@ class DominoGame {
      * 绘制放置提示
      */
     drawPreviewHint() {
-        this.ctx.fillStyle = 'rgba(90, 79, 207, 0.5)';
+        this.ctx.fillStyle = 'rgba(125, 211, 252, 0.8)';
         this.ctx.font = 'bold 16px Comic Sans MS';
         this.ctx.textAlign = 'center';
 
@@ -604,16 +604,36 @@ class DominoGame {
     drawBall() {
         this.ctx.save();
 
-        // 绘制黑色实心小球
+        // 绘制发光效果
+        const gradient = this.ctx.createRadialGradient(
+            this.ball.x, this.ball.y, 0,
+            this.ball.x, this.ball.y, this.ball.radius * 1.5
+        );
+        gradient.addColorStop(0, 'rgba(255, 200, 100, 0.3)');
+        gradient.addColorStop(1, 'rgba(255, 200, 100, 0)');
+        this.ctx.fillStyle = gradient;
+        this.ctx.beginPath();
+        this.ctx.arc(this.ball.x, this.ball.y, this.ball.radius * 1.5, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // 绘制金色小球
+        const ballGradient = this.ctx.createRadialGradient(
+            this.ball.x - 5, this.ball.y - 5, 0,
+            this.ball.x, this.ball.y, this.ball.radius
+        );
+        ballGradient.addColorStop(0, '#ffd700');
+        ballGradient.addColorStop(0.5, '#daa520');
+        ballGradient.addColorStop(1, '#b8860b');
+
         this.ctx.beginPath();
         this.ctx.arc(this.ball.x, this.ball.y, this.ball.radius, 0, Math.PI * 2);
-        this.ctx.fillStyle = '#000000';
+        this.ctx.fillStyle = ballGradient;
         this.ctx.fill();
 
         // 添加高光效果
         this.ctx.beginPath();
-        this.ctx.arc(this.ball.x - 4, this.ball.y - 4, this.ball.radius * 0.3, 0, Math.PI * 2);
-        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        this.ctx.arc(this.ball.x - 6, this.ball.y - 6, this.ball.radius * 0.35, 0, Math.PI * 2);
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
         this.ctx.fill();
 
         this.ctx.restore();
@@ -629,7 +649,7 @@ class DominoGame {
 
         // 绘制轨道
         this.ctx.save();
-        this.ctx.strokeStyle = 'rgba(139, 69, 19, 0.6)';
+        this.ctx.strokeStyle = 'rgba(255, 200, 100, 0.3)';
         this.ctx.lineWidth = 6;
         this.ctx.lineCap = 'round';
         this.ctx.lineJoin = 'round';
@@ -643,7 +663,7 @@ class DominoGame {
         this.ctx.stroke();
 
         // 绘制轨道边框（模拟过山车轨道）
-        this.ctx.strokeStyle = 'rgba(100, 100, 100, 0.4)';
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
         this.ctx.lineWidth = 10;
         this.ctx.beginPath();
         this.ctx.moveTo(trackPoints[0].x, trackPoints[0].y);
@@ -653,7 +673,7 @@ class DominoGame {
         this.ctx.stroke();
 
         // 重新绘制中心线
-        this.ctx.strokeStyle = '#8B4513';
+        this.ctx.strokeStyle = '#daa520';
         this.ctx.lineWidth = 4;
         this.ctx.beginPath();
         this.ctx.moveTo(trackPoints[0].x, trackPoints[0].y);
@@ -663,7 +683,7 @@ class DominoGame {
         this.ctx.stroke();
 
         // 绘制轨道支撑点
-        this.ctx.fillStyle = '#654321';
+        this.ctx.fillStyle = '#b8860b';
         for (let i = 0; i < trackPoints.length; i += 10) {
             this.ctx.beginPath();
             this.ctx.arc(trackPoints[i].x, trackPoints[i].y, 3, 0, Math.PI * 2);

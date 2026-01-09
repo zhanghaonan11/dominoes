@@ -180,6 +180,9 @@ class Building {
     startExplosion() {
         if (this.isExploding) return;
 
+        // 埃菲尔铁塔不发生爆炸
+        if (this.type === 'eiffel') return;
+
         this.isExploding = true;
         this.explosionProgress = 0;
 

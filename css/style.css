@@ -6,7 +6,7 @@
 
 body {
     font-family: 'Comic Sans MS', 'Chalkboard', cursive, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
     min-height: 100vh;
     overflow: hidden;
 }
@@ -24,16 +24,17 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 10px 20px;
-    background: rgba(255, 255, 255, 0.95);
+    background: rgba(30, 30, 50, 0.95);
     border-radius: 15px;
     margin-bottom: 10px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .game-header h1 {
-    color: #5a4fcf;
+    color: #7dd3fc;
     font-size: 1.8rem;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+    text-shadow: 0 0 10px rgba(125, 211, 252, 0.5);
 }
 
 .controls {
@@ -96,14 +97,15 @@ body {
 }
 
 .panel {
-    background: rgba(255, 255, 255, 0.95);
+    background: rgba(30, 30, 50, 0.95);
     border-radius: 15px;
     padding: 15px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .panel h3 {
-    color: #5a4fcf;
+    color: #7dd3fc;
     margin-bottom: 10px;
     font-size: 1rem;
     text-align: center;
@@ -166,20 +168,21 @@ body {
 .size-option {
     display: inline-block;
     padding: 8px 15px;
-    background: #e0e0e0;
+    background: rgba(60, 60, 80, 0.8);
+    color: #aaa;
     border-radius: 20px;
     font-weight: bold;
     transition: all 0.3s ease;
 }
 
 .size-selector input:checked + .size-option {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
     color: white;
 }
 
 .hint {
     font-size: 0.85rem;
-    color: #666;
+    color: #aaa;
     line-height: 1.4;
 }
 
@@ -232,11 +235,12 @@ body {
 /* 画布容器 */
 .canvas-container {
     flex: 1;
-    background: rgba(255, 255, 255, 0.95);
+    background: rgba(20, 20, 35, 0.95);
     border-radius: 15px;
     overflow: hidden;
     position: relative;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 #gameCanvas {
