@@ -22,6 +22,16 @@ class DominoGame {
         this.currentSize = 'medium';
         this.isAnimating = false;
 
+        // 小球状态
+        this.ball = {
+            x: 50,
+            y: 50,
+            radius: 30,  // 放大1倍 (15 * 2)
+            isMoving: false,
+            progress: 0,  // 0-1 表示沿轨道的进度
+            path: []      // 路径点
+        };
+
         // 初始化组件
         this.physics = new PhysicsEngine();
         this.audio = new AudioManager();
@@ -220,6 +230,12 @@ class DominoGame {
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
 
+        // 检查是否点击了小球
+        if (this.isClickOnBall(x, y)) {
+            this.startDominoEffect();
+            return;
+        }
+
         if (this.selectedBuilding !== null) {
             // 放置建筑
             this.placeBuilding(x, y);
@@ -227,6 +243,16 @@ class DominoGame {
             // 放置新骨牌
             this.placeDomino(x, y);
         }
+    }
+
+    /**
+     * 检查是否点击了小球
+     */
+    isClickOnBall(x, y) {
+        const dx = x - this.ball.x;
+        const dy = y - this.ball.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        return distance <= this.ball.radius;
     }
 
     /**
@@ -284,8 +310,8 @@ class DominoGame {
             height: Math.round(baseSize.height * growthFactor)
         };
 
-        // 骨牌底部自动对齐到画布中间
-        y = this.canvas.height / 2;
+        // 骨牌底部自动对齐到画布底部
+        y = this.canvas.height - 80;
 
         // 水平位置：根据已有骨牌动态计算，保持合适间距
         const startX = 80;
@@ -321,7 +347,7 @@ class DominoGame {
      */
     placeBuilding(x, y) {
         // 建筑放在最后一个骨牌的右边
-        y = this.canvas.height / 2;
+        y = this.canvas.height - 80;
 
         if (this.dominoes.length > 0) {
             const lastDomino = this.dominoes[this.dominoes.length - 1];
@@ -347,9 +373,12 @@ class DominoGame {
         // 按位置排序骨牌
         this.dominoes.sort((a, b) => a.x - b.x);
 
-        // 设置物理引擎
+        // 先让小球开始移动
+        this.ball.isMoving = true;
+        this.ball.progress = 0;
+
+        // 设置物理引擎（但还不启动）
         this.physics.setDominoes(this.dominoes);
-        this.physics.start();
     }
 
     /**
@@ -420,6 +449,11 @@ class DominoGame {
             setTimeout(() => {
                 this.audio.speakCelebration();
             }, 500);
+
+            // 3秒后自动重置游戏
+            setTimeout(() => {
+                this.reset();
+            }, 3000);
         }, 300);
     }
 
@@ -433,6 +467,7 @@ class DominoGame {
         this.building = null;
         this.celebration.hidden = true;
         this.audio.clear();
+        this.resetBall();
         this.draw();
     }
 
@@ -440,6 +475,16 @@ class DominoGame {
      * 游戏主循环
      */
     gameLoop() {
+        // 更新小球
+        if (this.ball.isMoving) {
+            const ballReached = this.updateBall();
+            if (ballReached) {
+                // 小球到达第一个骨牌，开始推倒
+                this.physics.start();
+                this.audio.playSound('fall');
+            }
+        }
+
         // 更新物理
         if (this.isAnimating) {
             this.physics.update();
@@ -483,6 +528,10 @@ class DominoGame {
             this.building.draw(this.ctx);
         }
 
+        // 绘制小球轨道和小球
+        this.drawBallTrack();
+        this.drawBall();
+
         // 如果有选中的骨牌或建筑，显示预览
         if ((this.selectedCharacter !== null || this.selectedBuilding !== null) && !this.isAnimating) {
             this.drawPreviewHint();
@@ -517,7 +566,7 @@ class DominoGame {
      * 绘制地面
      */
     drawGround() {
-        const groundY = this.canvas.height / 2;
+        const groundY = this.canvas.height - 80;
 
         this.ctx.strokeStyle = '#8b4513';
         this.ctx.lineWidth = 3;
@@ -547,6 +596,187 @@ class DominoGame {
         }
 
         this.ctx.fillText(hint, this.canvas.width / 2, 30);
+    }
+
+    /**
+     * 绘制小球
+     */
+    drawBall() {
+        this.ctx.save();
+
+        // 绘制黑色实心小球
+        this.ctx.beginPath();
+        this.ctx.arc(this.ball.x, this.ball.y, this.ball.radius, 0, Math.PI * 2);
+        this.ctx.fillStyle = '#000000';
+        this.ctx.fill();
+
+        // 添加高光效果
+        this.ctx.beginPath();
+        this.ctx.arc(this.ball.x - 4, this.ball.y - 4, this.ball.radius * 0.3, 0, Math.PI * 2);
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        this.ctx.fill();
+
+        this.ctx.restore();
+    }
+
+    /**
+     * 绘制小球轨道 - 过山车螺旋下降样式
+     */
+    drawBallTrack() {
+        // 获取轨道路径点
+        const trackPoints = this.getTrackPoints();
+        if (trackPoints.length === 0) return;
+
+        // 绘制轨道
+        this.ctx.save();
+        this.ctx.strokeStyle = 'rgba(139, 69, 19, 0.6)';
+        this.ctx.lineWidth = 6;
+        this.ctx.lineCap = 'round';
+        this.ctx.lineJoin = 'round';
+
+        // 绘制轨道主线
+        this.ctx.beginPath();
+        this.ctx.moveTo(trackPoints[0].x, trackPoints[0].y);
+        for (let i = 1; i < trackPoints.length; i++) {
+            this.ctx.lineTo(trackPoints[i].x, trackPoints[i].y);
+        }
+        this.ctx.stroke();
+
+        // 绘制轨道边框（模拟过山车轨道）
+        this.ctx.strokeStyle = 'rgba(100, 100, 100, 0.4)';
+        this.ctx.lineWidth = 10;
+        this.ctx.beginPath();
+        this.ctx.moveTo(trackPoints[0].x, trackPoints[0].y);
+        for (let i = 1; i < trackPoints.length; i++) {
+            this.ctx.lineTo(trackPoints[i].x, trackPoints[i].y);
+        }
+        this.ctx.stroke();
+
+        // 重新绘制中心线
+        this.ctx.strokeStyle = '#8B4513';
+        this.ctx.lineWidth = 4;
+        this.ctx.beginPath();
+        this.ctx.moveTo(trackPoints[0].x, trackPoints[0].y);
+        for (let i = 1; i < trackPoints.length; i++) {
+            this.ctx.lineTo(trackPoints[i].x, trackPoints[i].y);
+        }
+        this.ctx.stroke();
+
+        // 绘制轨道支撑点
+        this.ctx.fillStyle = '#654321';
+        for (let i = 0; i < trackPoints.length; i += 10) {
+            this.ctx.beginPath();
+            this.ctx.arc(trackPoints[i].x, trackPoints[i].y, 3, 0, Math.PI * 2);
+            this.ctx.fill();
+        }
+
+        this.ctx.restore();
+    }
+
+    /**
+     * 生成之字形轨道路径点 - 左右来回倾斜下降
+     */
+    getTrackPoints() {
+        if (this.dominoes.length === 0) return [];
+
+        const points = [];
+        const startX = 50;
+        const startY = 50;
+        const groundY = this.canvas.height - 80;
+        const firstDomino = this.dominoes[0];
+        const endX = firstDomino.x;
+        const endY = groundY - 10;
+
+        // 屏幕边界
+        const leftBound = 30;
+        const rightBound = this.canvas.width - 30;
+
+        // 之字形参数：2次弯折
+        const zigzags = 2;
+        const totalSegments = zigzags * 2;  // 每次来回有2段
+        const segmentHeight = (endY - startY) / (totalSegments + 0.5);  // 留一点给最后到骨牌的路径
+
+        // 生成之字形路径的关键点
+        const keyPoints = [{ x: startX, y: startY }];
+
+        for (let i = 0; i < zigzags; i++) {
+            // 向右倾斜到右边界
+            keyPoints.push({
+                x: rightBound,
+                y: startY + segmentHeight * (i * 2 + 1)
+            });
+            // 向左倾斜到左边界
+            keyPoints.push({
+                x: leftBound,
+                y: startY + segmentHeight * (i * 2 + 2)
+            });
+        }
+
+        // 最后一段：从左边界到第一个骨牌
+        keyPoints.push({ x: endX, y: endY });
+
+        // 在关键点之间插值生成平滑路径
+        const pointsPerSegment = 30;
+        for (let seg = 0; seg < keyPoints.length - 1; seg++) {
+            const p1 = keyPoints[seg];
+            const p2 = keyPoints[seg + 1];
+
+            for (let i = 0; i < pointsPerSegment; i++) {
+                const t = i / pointsPerSegment;
+                points.push({
+                    x: p1.x + (p2.x - p1.x) * t,
+                    y: p1.y + (p2.y - p1.y) * t
+                });
+            }
+        }
+        // 添加最后一个点
+        points.push(keyPoints[keyPoints.length - 1]);
+
+        return points;
+    }
+
+    /**
+     * 更新小球位置 - 沿过山车轨道移动
+     */
+    updateBall() {
+        if (!this.ball.isMoving || this.dominoes.length === 0) return false;
+
+        const trackPoints = this.getTrackPoints();
+        if (trackPoints.length === 0) return false;
+
+        this.ball.progress += 0.002;  // 速度再减慢2倍
+
+        if (this.ball.progress >= 1) {
+            this.ball.progress = 1;
+            this.ball.isMoving = false;
+            // 设置小球到终点位置
+            const lastPoint = trackPoints[trackPoints.length - 1];
+            this.ball.x = lastPoint.x;
+            this.ball.y = lastPoint.y;
+            return true;  // 小球到达终点
+        }
+
+        // 根据进度获取轨道上的位置
+        const index = Math.floor(this.ball.progress * (trackPoints.length - 1));
+        const nextIndex = Math.min(index + 1, trackPoints.length - 1);
+        const localT = (this.ball.progress * (trackPoints.length - 1)) - index;
+
+        // 线性插值
+        this.ball.x = trackPoints[index].x + (trackPoints[nextIndex].x - trackPoints[index].x) * localT;
+        this.ball.y = trackPoints[index].y + (trackPoints[nextIndex].y - trackPoints[index].y) * localT;
+
+        return false;
+    }
+
+    /**
+     * 重置小球位置
+     */
+    resetBall() {
+        this.ball.x = 50;
+        this.ball.y = 50;
+        this.ball.radius = 30;
+        this.ball.isMoving = false;
+        this.ball.progress = 0;
     }
 }
 
