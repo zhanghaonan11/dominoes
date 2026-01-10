@@ -4,18 +4,56 @@
     box-sizing: border-box;
 }
 
+:root {
+    --primary-color: #7dd3fc;
+    --secondary-color: #f093fb;
+    --accent-color: #4facfe;
+    --bg-dark: #0a0a1a;
+    --bg-card: rgba(25, 25, 45, 0.85);
+    --border-glow: rgba(125, 211, 252, 0.3);
+    --text-muted: #8892a0;
+}
+
 body {
     font-family: 'Comic Sans MS', 'Chalkboard', cursive, sans-serif;
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    background: linear-gradient(135deg, #0a0a1a 0%, #1a1a3e 50%, #0f2847 100%);
     min-height: 100vh;
     overflow: hidden;
+    position: relative;
+}
+
+/* 背景星星动画 */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image:
+        radial-gradient(2px 2px at 20px 30px, rgba(255,255,255,0.3), transparent),
+        radial-gradient(2px 2px at 40px 70px, rgba(255,255,255,0.2), transparent),
+        radial-gradient(1px 1px at 90px 40px, rgba(255,255,255,0.4), transparent),
+        radial-gradient(2px 2px at 130px 80px, rgba(255,255,255,0.2), transparent),
+        radial-gradient(1px 1px at 160px 120px, rgba(255,255,255,0.3), transparent);
+    background-size: 200px 150px;
+    animation: twinkleStars 4s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 0;
+}
+
+@keyframes twinkleStars {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
 }
 
 .game-container {
     display: flex;
     flex-direction: column;
     height: 100vh;
-    padding: 10px;
+    padding: 12px;
+    position: relative;
+    z-index: 1;
 }
 
 /* 头部样式 */
@@ -23,18 +61,44 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 20px;
-    background: rgba(30, 30, 50, 0.95);
-    border-radius: 15px;
-    margin-bottom: 10px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 12px 24px;
+    background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 20px;
+    margin-bottom: 12px;
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--border-glow);
+    position: relative;
+    overflow: hidden;
+}
+
+.game-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 200%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+    animation: shimmer 3s infinite;
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-50%); }
+    100% { transform: translateX(50%); }
 }
 
 .game-header h1 {
-    color: #7dd3fc;
+    color: var(--primary-color);
     font-size: 1.8rem;
-    text-shadow: 0 0 10px rgba(125, 211, 252, 0.5);
+    text-shadow:
+        0 0 10px rgba(125, 211, 252, 0.5),
+        0 0 30px rgba(125, 211, 252, 0.3);
+    position: relative;
+    letter-spacing: 2px;
 }
 
 .controls {
@@ -43,118 +107,256 @@ body {
 }
 
 .btn {
-    padding: 12px 30px;
+    padding: 14px 32px;
     font-size: 1.2rem;
     font-weight: bold;
     border: none;
-    border-radius: 25px;
+    border-radius: 30px;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     font-family: inherit;
+    position: relative;
+    overflow: hidden;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    transition: left 0.5s;
+}
+
+.btn:hover::before {
+    left: 100%;
 }
 
 .btn-reset {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    background: linear-gradient(135deg, #ff6b9d 0%, #c44569 100%);
     color: white;
+    box-shadow: 0 4px 15px rgba(196, 69, 105, 0.4);
 }
 
 .btn-reset:hover {
-    transform: scale(1.05);
-    box-shadow: 0 5px 20px rgba(240, 147, 251, 0.5);
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 8px 25px rgba(196, 69, 105, 0.6);
+}
+
+.btn-reset:active {
+    transform: translateY(-1px) scale(0.98);
 }
 
 .btn-push {
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    background: linear-gradient(135deg, #00d4ff 0%, #5a67d8 100%);
     color: white;
-    animation: pulse 2s infinite;
+    box-shadow: 0 4px 15px rgba(90, 103, 216, 0.4);
+    animation: pushPulse 2s infinite;
 }
 
 .btn-push:hover {
-    transform: scale(1.05);
-    box-shadow: 0 5px 20px rgba(79, 172, 254, 0.5);
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 8px 25px rgba(90, 103, 216, 0.6);
+    animation: none;
 }
 
-@keyframes pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(79, 172, 254, 0.4); }
-    50% { box-shadow: 0 0 0 10px rgba(79, 172, 254, 0); }
+.btn-push:active {
+    transform: translateY(-1px) scale(0.98);
+}
+
+@keyframes pushPulse {
+    0%, 100% {
+        box-shadow: 0 4px 15px rgba(90, 103, 216, 0.4),
+                    0 0 0 0 rgba(0, 212, 255, 0.4);
+    }
+    50% {
+        box-shadow: 0 4px 15px rgba(90, 103, 216, 0.4),
+                    0 0 0 15px rgba(0, 212, 255, 0);
+    }
 }
 
 /* 游戏内容区 */
 .game-content {
     display: flex;
     flex: 1;
-    gap: 10px;
+    gap: 12px;
     overflow: hidden;
 }
 
 /* 侧边栏 */
 .sidebar {
-    width: 200px;
+    width: 220px;
     display: flex;
     flex-direction: column;
     gap: 10px;
     overflow-y: auto;
+    padding-right: 5px;
+}
+
+/* 自定义滚动条 */
+.sidebar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+    background: rgba(255,255,255,0.05);
+    border-radius: 3px;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+    background: rgba(125, 211, 252, 0.3);
+    border-radius: 3px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+    background: rgba(125, 211, 252, 0.5);
 }
 
 .panel {
-    background: rgba(30, 30, 50, 0.95);
-    border-radius: 15px;
-    padding: 15px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 18px;
+    padding: 16px;
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(125, 211, 252, 0.15);
+    transition: all 0.3s ease;
+}
+
+.panel:hover {
+    border-color: rgba(125, 211, 252, 0.3);
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.4),
+        0 0 20px rgba(125, 211, 252, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .panel h3 {
-    color: #7dd3fc;
-    margin-bottom: 10px;
+    color: var(--primary-color);
+    margin-bottom: 12px;
     font-size: 1rem;
     text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    position: relative;
+    padding-bottom: 8px;
+}
+
+.panel h3::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--primary-color), transparent);
 }
 
 /* 骨牌网格 */
 .domino-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 5px;
+    gap: 6px;
 }
 
 .domino-btn {
     aspect-ratio: 1/2;
-    background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
-    border: 3px solid #e07c4f;
-    border-radius: 8px;
+    background: linear-gradient(180deg, #fff8f0 0%, #ffe4c9 50%, #ffd4a8 100%);
+    border: 3px solid #d4915c;
+    border-radius: 10px;
     font-size: 1rem;
     font-weight: bold;
-    color: #8b4513;
+    color: #6b3e1a;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     align-items: center;
     justify-content: center;
+    position: relative;
+    overflow: hidden;
+    box-shadow:
+        0 4px 8px rgba(0, 0, 0, 0.2),
+        inset 0 2px 4px rgba(255, 255, 255, 0.5);
+}
+
+.domino-btn::before {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    right: 3px;
+    height: 40%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.6) 0%, transparent 100%);
+    border-radius: 6px 6px 50% 50%;
+    pointer-events: none;
 }
 
 .domino-btn:hover {
-    transform: scale(1.1);
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+    transform: translateY(-4px) scale(1.08);
+    box-shadow:
+        0 8px 20px rgba(0, 0, 0, 0.3),
+        0 0 15px rgba(212, 145, 92, 0.4),
+        inset 0 2px 4px rgba(255, 255, 255, 0.5);
+    border-color: #c07830;
+}
+
+.domino-btn:active {
+    transform: translateY(-2px) scale(1.02);
 }
 
 .domino-btn.selected {
-    background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
-    border-color: #5a4fcf;
-    box-shadow: 0 0 15px rgba(90, 79, 207, 0.5);
+    background: linear-gradient(180deg, #b8f4e0 0%, #7eecc4 50%, #4fd9a8 100%);
+    border-color: #2ecc71;
+    color: #1a6b42;
+    box-shadow:
+        0 0 20px rgba(46, 204, 113, 0.5),
+        0 4px 12px rgba(0, 0, 0, 0.2),
+        inset 0 2px 4px rgba(255, 255, 255, 0.5);
+    animation: selectedBounce 0.4s ease;
+}
+
+@keyframes selectedBounce {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+    100% { transform: scale(1); }
 }
 
 .domino-btn.number {
-    background: linear-gradient(135deg, #a8edea 0%, #56ccf2 100%);
+    background: linear-gradient(180deg, #e0f4ff 0%, #a8e0ff 50%, #70c8ff 100%);
     border-color: #3498db;
     color: #1a5276;
+}
+
+.domino-btn.number:hover {
+    border-color: #2980b9;
+    box-shadow:
+        0 8px 20px rgba(0, 0, 0, 0.3),
+        0 0 15px rgba(52, 152, 219, 0.4),
+        inset 0 2px 4px rgba(255, 255, 255, 0.5);
+}
+
+.domino-btn.number.selected {
+    background: linear-gradient(180deg, #ffeaa8 0%, #ffd54f 50%, #ffca28 100%);
+    border-color: #f39c12;
+    color: #7d5a00;
+    box-shadow:
+        0 0 20px rgba(243, 156, 18, 0.5),
+        0 4px 12px rgba(0, 0, 0, 0.2),
+        inset 0 2px 4px rgba(255, 255, 255, 0.5);
 }
 
 /* 大小选择器 */
 .size-selector {
     display: flex;
     justify-content: center;
-    gap: 10px;
+    gap: 8px;
 }
 
 .size-selector label {
@@ -167,23 +369,35 @@ body {
 
 .size-option {
     display: inline-block;
-    padding: 8px 15px;
-    background: rgba(60, 60, 80, 0.8);
-    color: #aaa;
-    border-radius: 20px;
+    padding: 10px 18px;
+    background: rgba(40, 40, 60, 0.8);
+    color: var(--text-muted);
+    border-radius: 25px;
     font-weight: bold;
-    transition: all 0.3s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 2px solid transparent;
+}
+
+.size-option:hover {
+    background: rgba(60, 60, 80, 0.9);
+    color: #bbb;
 }
 
 .size-selector input:checked + .size-option {
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    background: linear-gradient(135deg, #00d4ff 0%, #5a67d8 100%);
     color: white;
+    box-shadow: 0 4px 15px rgba(90, 103, 216, 0.4);
+    border-color: rgba(255, 255, 255, 0.2);
 }
 
 .hint {
-    font-size: 0.85rem;
-    color: #aaa;
-    line-height: 1.4;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 10px;
+    border-radius: 10px;
+    border-left: 3px solid var(--primary-color);
 }
 
 /* 建筑网格 */
@@ -194,53 +408,107 @@ body {
 }
 
 .building-btn {
-    padding: 8px 4px;
-    background: linear-gradient(135deg, #ffd89b 0%, #19547b 100%);
-    border: 3px solid #c9a227;
-    border-radius: 10px;
+    padding: 10px 6px;
+    background: linear-gradient(180deg, #ffecd2 0%, #fcb69f 50%, #ee8c6e 100%);
+    border: 3px solid #d4724c;
+    border-radius: 12px;
     font-size: 0.75rem;
     font-weight: bold;
-    color: #fff;
+    color: #5c2e1a;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+    gap: 4px;
+    position: relative;
+    overflow: hidden;
+    box-shadow:
+        0 4px 10px rgba(0, 0, 0, 0.25),
+        inset 0 2px 4px rgba(255, 255, 255, 0.4);
+}
+
+.building-btn::before {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    right: 3px;
+    height: 35%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.5) 0%, transparent 100%);
+    border-radius: 8px 8px 50% 50%;
+    pointer-events: none;
 }
 
 .building-btn .emoji {
-    font-size: 1.5rem;
+    font-size: 1.8rem;
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,0.2));
 }
 
 .building-btn:hover {
-    transform: scale(1.08);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    transform: translateY(-4px) scale(1.05);
+    box-shadow:
+        0 10px 25px rgba(0, 0, 0, 0.35),
+        0 0 20px rgba(252, 182, 159, 0.4),
+        inset 0 2px 4px rgba(255, 255, 255, 0.4);
+}
+
+.building-btn:active {
+    transform: translateY(-2px) scale(1.02);
 }
 
 .building-btn.selected {
-    background: linear-gradient(135deg, #ff6b6b 0%, #feca57 100%);
-    border-color: #ee5253;
-    box-shadow: 0 0 20px rgba(255, 107, 107, 0.6);
-    animation: buildingPulse 1s infinite;
+    background: linear-gradient(180deg, #fff176 0%, #ffeb3b 50%, #fdd835 100%);
+    border-color: #f57f17;
+    color: #5d4037;
+    box-shadow:
+        0 0 25px rgba(255, 235, 59, 0.6),
+        0 6px 20px rgba(0, 0, 0, 0.3),
+        inset 0 2px 4px rgba(255, 255, 255, 0.5);
+    animation: buildingPulse 1.5s infinite ease-in-out;
 }
 
 @keyframes buildingPulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.05); }
+    0%, 100% {
+        transform: scale(1);
+        box-shadow:
+            0 0 25px rgba(255, 235, 59, 0.6),
+            0 6px 20px rgba(0, 0, 0, 0.3);
+    }
+    50% {
+        transform: scale(1.03);
+        box-shadow:
+            0 0 35px rgba(255, 235, 59, 0.8),
+            0 8px 25px rgba(0, 0, 0, 0.35);
+    }
 }
 
 /* 画布容器 */
 .canvas-container {
     flex: 1;
-    background: rgba(20, 20, 35, 0.95);
-    border-radius: 15px;
+    background: linear-gradient(180deg, rgba(15, 15, 30, 0.95) 0%, rgba(20, 25, 40, 0.95) 100%);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 20px;
     overflow: hidden;
     position: relative;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow:
+        0 10px 40px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(125, 211, 252, 0.2);
+}
+
+.canvas-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 100px;
+    background: linear-gradient(180deg, rgba(125, 211, 252, 0.05) 0%, transparent 100%);
+    pointer-events: none;
+    z-index: 1;
 }
 
 #gameCanvas {
@@ -256,11 +524,12 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.7);
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.85) 100%);
     display: flex;
     align-items: center;
     justify-content: center;
     animation: fadeIn 0.5s ease;
+    z-index: 100;
 }
 
 .celebration[hidden] {
@@ -270,22 +539,45 @@ body {
 .celebration-content {
     text-align: center;
     color: white;
-    animation: bounceIn 0.5s ease;
+    animation: bounceIn 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 }
 
 .celebration-content h2 {
-    font-size: 4rem;
+    font-size: 5rem;
     margin-bottom: 20px;
-    background: linear-gradient(135deg, #f093fb, #f5576c, #ffecd2, #4facfe);
+    background: linear-gradient(135deg, #ff6b9d 0%, #ffecd2 25%, #4facfe 50%, #43e97b 75%, #f093fb 100%);
+    background-size: 200% 200%;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    animation: gradientShift 2s ease infinite;
+    text-shadow: none;
+    filter: drop-shadow(0 0 30px rgba(255, 255, 255, 0.3));
+}
+
+@keyframes gradientShift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
 }
 
 .stars {
-    font-size: 3rem;
+    font-size: 4rem;
     color: #ffd700;
-    animation: twinkle 1s infinite;
+    animation: starBounce 0.8s ease infinite;
+    text-shadow:
+        0 0 20px rgba(255, 215, 0, 0.8),
+        0 0 40px rgba(255, 215, 0, 0.4);
+}
+
+@keyframes starBounce {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.2);
+        opacity: 0.8;
+    }
 }
 
 @keyframes fadeIn {
@@ -294,32 +586,106 @@ body {
 }
 
 @keyframes bounceIn {
-    0% { transform: scale(0); }
-    50% { transform: scale(1.2); }
-    100% { transform: scale(1); }
-}
-
-@keyframes twinkle {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+    0% {
+        transform: scale(0) rotate(-10deg);
+        opacity: 0;
+    }
+    60% {
+        transform: scale(1.2) rotate(5deg);
+    }
+    100% {
+        transform: scale(1) rotate(0deg);
+        opacity: 1;
+    }
 }
 
 /* 响应式设计 */
 @media (max-width: 768px) {
+    .game-header {
+        padding: 10px 16px;
+        flex-direction: column;
+        gap: 10px;
+    }
+
     .game-header h1 {
-        font-size: 1.2rem;
+        font-size: 1.3rem;
     }
 
     .btn {
-        padding: 8px 16px;
+        padding: 10px 20px;
         font-size: 1rem;
     }
 
     .sidebar {
-        width: 150px;
+        width: 160px;
     }
 
     .domino-grid {
         grid-template-columns: repeat(3, 1fr);
     }
+
+    .celebration-content h2 {
+        font-size: 3rem;
+    }
+
+    .stars {
+        font-size: 2.5rem;
+    }
+}
+
+/* 触摸设备优化 */
+@media (hover: none) {
+    .domino-btn:hover,
+    .building-btn:hover,
+    .btn:hover {
+        transform: none;
+    }
+
+    .domino-btn:active,
+    .building-btn:active {
+        transform: scale(0.95);
+    }
+}
+
+/* 屏幕晃动效果 */
+@keyframes screenShake {
+    0%, 100% { transform: translate(0, 0) rotate(0deg); }
+    10% { transform: translate(-8px, -6px) rotate(-1deg); }
+    20% { transform: translate(8px, 4px) rotate(1deg); }
+    30% { transform: translate(-6px, 8px) rotate(-0.5deg); }
+    40% { transform: translate(6px, -4px) rotate(0.5deg); }
+    50% { transform: translate(-4px, 6px) rotate(-1deg); }
+    60% { transform: translate(4px, -8px) rotate(1deg); }
+    70% { transform: translate(-8px, 4px) rotate(-0.5deg); }
+    80% { transform: translate(8px, -6px) rotate(0.5deg); }
+    90% { transform: translate(-4px, -4px) rotate(0deg); }
+}
+
+@keyframes impactFlash {
+    0% {
+        box-shadow: inset 0 0 0 rgba(255, 255, 255, 0);
+    }
+    15% {
+        box-shadow: inset 0 0 100px rgba(255, 255, 255, 0.3);
+    }
+    100% {
+        box-shadow: inset 0 0 0 rgba(255, 255, 255, 0);
+    }
+}
+
+.canvas-container.screen-shake {
+    animation: screenShake 0.6s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+.canvas-container.screen-shake::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    animation: impactFlash 0.6s ease-out;
+    z-index: 10;
+    border-radius: 20px;
 }

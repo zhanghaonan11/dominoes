@@ -393,13 +393,31 @@ class DominoGame {
             this.audio.speakDomino(domino);
         }, 100);
 
-        // 检查最后一个骨牌是否碰到建筑
-        if (index === this.dominoes.length - 1 && this.building) {
-            // 延迟触发建筑爆炸
-            setTimeout(() => {
-                this.triggerBuildingExplosion();
-            }, 500);
+        // 检查是否是最后一个骨牌
+        if (index === this.dominoes.length - 1) {
+            // 触发屏幕晃动效果
+            this.triggerScreenShake();
+
+            // 如果有建筑，延迟触发建筑爆炸
+            if (this.building) {
+                setTimeout(() => {
+                    this.triggerBuildingExplosion();
+                }, 500);
+            }
         }
+    }
+
+    /**
+     * 触发屏幕晃动效果
+     */
+    triggerScreenShake() {
+        const container = this.canvas.parentElement;
+        container.classList.add('screen-shake');
+
+        // 动画结束后移除类
+        setTimeout(() => {
+            container.classList.remove('screen-shake');
+        }, 600);
     }
 
     /**
