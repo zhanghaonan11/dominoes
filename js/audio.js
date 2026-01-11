@@ -125,11 +125,20 @@ class AudioManager {
      * 朗读骨牌上的字符
      */
     speakDomino(domino, callback) {
-        if (domino.isNumber) {
+        if (domino.isAnimal && domino.animalData) {
+            this.speakAnimal(domino.animalData, callback);
+        } else if (domino.isNumber) {
             this.speakNumber(domino.character, callback);
         } else {
             this.speakLetter(domino.character, callback);
         }
+    }
+
+    /**
+     * 朗读动物英文名
+     */
+    speakAnimal(animalData, callback) {
+        this.speak(animalData.name, callback);
     }
 
     /**

@@ -1,6 +1,23 @@
 /**
  * 多米诺骨牌游戏 - 主程序
  */
+
+// 动物数据
+const ANIMALS = [
+    { emoji: '🐶', name: 'Dog', nameCn: '狗' },
+    { emoji: '🐱', name: 'Cat', nameCn: '猫' },
+    { emoji: '🐼', name: 'Panda', nameCn: '熊猫' },
+    { emoji: '🦁', name: 'Lion', nameCn: '狮子' },
+    { emoji: '🐘', name: 'Elephant', nameCn: '大象' },
+    { emoji: '🐵', name: 'Monkey', nameCn: '猴子' },
+    { emoji: '🐷', name: 'Pig', nameCn: '猪' },
+    { emoji: '🐮', name: 'Cow', nameCn: '牛' },
+    { emoji: '🐸', name: 'Frog', nameCn: '青蛙' },
+    { emoji: '🐔', name: 'Chicken', nameCn: '鸡' },
+    { emoji: '🦆', name: 'Duck', nameCn: '鸭子' },
+    { emoji: '🐰', name: 'Rabbit', nameCn: '兔子' }
+];
+
 class DominoGame {
     constructor() {
         // 获取DOM元素
@@ -8,6 +25,7 @@ class DominoGame {
         this.ctx = this.canvas.getContext('2d');
         this.letterGrid = document.getElementById('letterGrid');
         this.numberGrid = document.getElementById('numberGrid');
+        this.animalGrid = document.getElementById('animalGrid');
         this.buildingGrid = document.getElementById('buildingGrid');
         this.resetBtn = document.getElementById('resetBtn');
         this.pushBtn = document.getElementById('pushBtn');
@@ -18,6 +36,8 @@ class DominoGame {
         this.building = null;  // 当前放置的建筑
         this.selectedCharacter = null;
         this.selectedIsNumber = false;
+        this.selectedIsAnimal = false;
+        this.selectedAnimalData = null;
         this.selectedBuilding = null;  // 选中的建筑类型
         this.currentSize = 'medium';
         this.isAnimating = false;
@@ -29,7 +49,7 @@ class DominoGame {
             radius: 30,  // 放大1倍 (15 * 2)
             isMoving: false,
             progress: 0,  // 0-1 表示沿轨道的进度
-            path: []      // 路径点
+      path: []      // 路径点
         };
 
         // 初始化组件
@@ -50,6 +70,7 @@ class DominoGame {
     init() {
         this.setupCanvas();
         this.createDominoButtons();
+        this.createAnimalButtons();
         this.createBuildingButtons();
         this.setupEventListeners();
         this.gameLoop();
@@ -92,6 +113,20 @@ class DominoGame {
             btn.addEventListener('click', () => this.selectDomino(i.toString(), true, btn));
             this.numberGrid.appendChild(btn);
         }
+    }
+
+    /**
+     * 创建动物骨牌按钮
+     */
+    createAnimalButtons() {
+        ANIMALS.forEach(animal => {
+            const btn = document.createElement('button');
+            btn.className = 'domino-btn animal';
+            btn.textContent = animal.emoji;
+            btn.title = animal.nameCn;
+            btn.addEventListener('click', () => this.selectAnimal(animal, btn));
+            this.animalGrid.appendChild(btn);
+        });
     }
 
     /**
@@ -172,6 +207,8 @@ class DominoGame {
         // 设置新选中
         this.selectedCharacter = character;
         this.selectedIsNumber = isNumber;
+        this.selectedIsAnimal = false;
+        this.selectedAnimalData = null;
         this.selectedBuilding = null;
         btnElement.classList.add('selected');
 
@@ -184,6 +221,28 @@ class DominoGame {
         } else {
             this.audio.speakLetter(character);
         }
+    }
+
+    /**
+     * 选择动物骨牌
+     */
+    selectAnimal(animalData, btnElement) {
+        // 清除之前的选中状态
+        this.clearAllSelections();
+
+        // 设置新选中
+        this.selectedCharacter = animalData.emoji;
+        this.selectedIsNumber = false;
+        this.selectedIsAnimal = true;
+        this.selectedAnimalData = animalData;
+        this.selectedBuilding = null;
+        btnElement.classList.add('selected');
+
+        // 播放点击音效
+        this.audio.playSound('click');
+
+        // 朗读动物英文名
+        this.audio.speakAnimal(animalData);
     }
 
     /**
@@ -217,6 +276,8 @@ class DominoGame {
     clearSelection() {
         this.selectedCharacter = null;
         this.selectedBuilding = null;
+        this.selectedIsAnimal = false;
+        this.selectedAnimalData = null;
         this.clearAllSelections();
     }
 
@@ -334,7 +395,9 @@ class DominoGame {
             this.selectedCharacter,
             this.currentSize,
             this.selectedIsNumber,
-            customDimensions
+            customDimensions,
+            this.selectedIsAnimal,
+            this.selectedAnimalData
         );
 
         this.dominoes.push(domino);

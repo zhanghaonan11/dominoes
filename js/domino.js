@@ -2,11 +2,13 @@
  * 多米诺骨牌类
  */
 class Domino {
-    constructor(x, y, character, size = 'medium', isNumber = false, customDimensions = null) {
+    constructor(x, y, character, size = 'medium', isNumber = false, customDimensions = null, isAnimal = false, animalData = null) {
         this.x = x;
         this.y = y;
         this.character = character;
         this.isNumber = isNumber;
+        this.isAnimal = isAnimal;
+        this.animalData = animalData;  // { emoji, name, nameCn }
 
         // 根据大小设置尺寸
         const sizes = {
@@ -34,17 +36,28 @@ class Domino {
         this.fallDirection = 1;  // 1: 向右倒, -1: 向左倒
 
         // 颜色配置
-        this.colors = isNumber ? {
-            primary: '#56ccf2',
-            secondary: '#2d98da',
-            text: '#1a5276',
-            border: '#3498db'
-        } : {
-            primary: '#fcb69f',
-            secondary: '#e07c4f',
-            text: '#8b4513',
-            border: '#d35400'
-        };
+        if (isAnimal) {
+            this.colors = {
+                primary: '#a8e6cf',
+                secondary: '#56ab91',
+                text: '#2d5a45',
+                border: '#3d8b6e'
+            };
+        } else if (isNumber) {
+            this.colors = {
+                primary: '#56ccf2',
+                secondary: '#2d98da',
+                text: '#1a5276',
+                border: '#3498db'
+            };
+        } else {
+            this.colors = {
+                primary: '#fcb69f',
+                secondary: '#e07c4f',
+                text: '#8b4513',
+                border: '#d35400'
+            };
+        }
     }
 
     /**
@@ -80,11 +93,17 @@ class Domino {
         ctx.stroke();
 
         // 绘制字符
-        ctx.fillStyle = this.colors.text;
-        ctx.font = `bold ${this.height * 0.4}px Comic Sans MS, cursive`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(this.character, 0, -this.height/2);
+        ctx.fillStyle = this.colors.text;
+        if (this.isAnimal && this.animalData) {
+            // 动物使用更大的 emoji
+            ctx.font = `${this.height * 0.5}px Arial`;
+            ctx.fillText(this.animalData.emoji, 0, -this.height/2);
+        } else {
+            ctx.font = `bold ${this.height * 0.4}px Comic Sans MS, cursive`;
+            ctx.fillText(this.character, 0, -this.height/2);
+        }
 
         // 添加高光效果
         ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
