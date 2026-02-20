@@ -44,8 +44,21 @@ struct GameConstants {
     }
 
     struct Colors {
-        static let backgroundGradientStart = UIColor(red: 0.53, green: 0.80, blue: 0.98, alpha: 1.0)
-        static let backgroundGradientEnd = UIColor(red: 0.88, green: 0.96, blue: 1.0, alpha: 1.0)
+        static let backgroundGradients = [
+            // 0: 蓝天白云 (Blue Sky)
+            (UIColor(red: 0.53, green: 0.80, blue: 0.98, alpha: 1.0), UIColor(red: 0.88, green: 0.96, blue: 1.0, alpha: 1.0)),
+            // 1: 微妙紫霞 (Dawn)
+            (UIColor(red: 0.85, green: 0.73, blue: 0.96, alpha: 1.0), UIColor(red: 0.98, green: 0.89, blue: 0.89, alpha: 1.0)),
+            // 2: 温暖日落 (Sunset)
+            (UIColor(red: 0.98, green: 0.61, blue: 0.45, alpha: 1.0), UIColor(red: 1.0, green: 0.85, blue: 0.65, alpha: 1.0)),
+            // 3: 暮光幽蓝 (Twilight)
+            (UIColor(red: 0.22, green: 0.26, blue: 0.44, alpha: 1.0), UIColor(red: 0.46, green: 0.35, blue: 0.55, alpha: 1.0)),
+            // 4: 明亮薄荷 (Minty)
+            (UIColor(red: 0.60, green: 0.89, blue: 0.81, alpha: 1.0), UIColor(red: 0.89, green: 0.98, blue: 0.87, alpha: 1.0))
+        ]
+        
+        static let backgroundGradientStart = backgroundGradients[0].0
+        static let backgroundGradientEnd = backgroundGradients[0].1
         static let groundMain = SKColor(red: 0.29, green: 0.85, blue: 0.51, alpha: 1.0)
         static let groundStrip = SKColor(red: 0.13, green: 0.77, blue: 0.37, alpha: 1.0)
         
@@ -85,7 +98,7 @@ struct GameConstants {
     
     struct Geometry {
         static let numDominos = 15
-        static let autoResetDelay: Int = 5
+        static let autoResetDelay: Int = 3
     }
     
     static let autoResetActionKey = "autoResetCountdown"
