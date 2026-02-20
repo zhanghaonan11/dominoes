@@ -16,15 +16,15 @@ struct GameConstants {
         static let ground: UInt32 = 1 << 2
         static let tower: UInt32 = 1 << 3
         
-        // World
-        static let gravity = CGVector(dx: 0, dy: -7.5) // slightly gentler than real-world for kid-friendly stability
+        // World (A: realistic-ish, but still stable)
+        static let gravity = CGVector(dx: 0, dy: -9.2)
         
-        // Domino tuning (start here; adjust by feel)
+        // Domino tuning (A: more natural fall, less "sticky")
         static let dominoMass: CGFloat = 0.25
-        static let dominoFriction: CGFloat = 0.85
-        static let dominoRestitution: CGFloat = 0.08
-        static let dominoLinearDamping: CGFloat = 0.35
-        static let dominoAngularDamping: CGFloat = 0.9
+        static let dominoFriction: CGFloat = 0.80
+        static let dominoRestitution: CGFloat = 0.07
+        static let dominoLinearDamping: CGFloat = 0.20
+        static let dominoAngularDamping: CGFloat = 0.65
         
         // Ball tuning
         static let ballFriction: CGFloat = 0.35
@@ -32,12 +32,12 @@ struct GameConstants {
         static let ballLinearDamping: CGFloat = 0.12
         static let ballAngularDamping: CGFloat = 0.08
         
-        // Fallback nudger (anti-stall)
-        static let stallTimeout: TimeInterval = 1.0
-        static let stallCheckInterval: TimeInterval = 0.45
-        static let maxNudges = 3
-        static let nudgeAngularImpulse: CGFloat = -0.055
-        static let nudgeLinearImpulseX: CGFloat = -0.18
+        // Fallback nudger (anti-stall) — Option 2: keep it subtle and rare
+        static let stallTimeout: TimeInterval = 1.6
+        static let stallCheckInterval: TimeInterval = 0.6
+        static let maxNudges = 1
+        static let nudgeAngularImpulse: CGFloat = -0.03
+        static let nudgeLinearImpulseX: CGFloat = -0.10
         
         // Fallen detection
         static let fallenAngleThreshold: CGFloat = 38 * .pi / 180

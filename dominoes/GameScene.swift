@@ -629,7 +629,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                 ball.physicsBody?.isDynamic = true
                 
                 // Give it a gentle forward impulse so it can actually topple the first tile.
-                ball.physicsBody?.applyImpulse(CGVector(dx: 1.6 * layout.ballRadius, dy: 0.15 * layout.ballRadius))
+                // A-mode: keep the push more physical (less "scripted")
+                ball.physicsBody?.applyImpulse(CGVector(dx: 1.25 * layout.ballRadius, dy: 0.10 * layout.ballRadius))
             }
         ])
         run(enableBallPhysics)
