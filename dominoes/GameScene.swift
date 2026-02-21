@@ -8,6 +8,7 @@
 import SpriteKit
 import UIKit
 import os
+import AVFoundation
 
 final class GameScene: SKScene, SKPhysicsContactDelegate {
     private struct Layout {
@@ -38,6 +39,189 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         var directAssistCount: Int = 0
         var fallbackAssistCount: Int = 0
     }
+
+    private enum LearningMode: CaseIterable {
+        case learning
+        case challenge
+
+        var title: String {
+            switch self {
+            case .learning:
+                return "学习模式"
+            case .challenge:
+                return "挑战模式"
+            }
+        }
+    }
+
+    private enum DifficultyLevel: Int, CaseIterable {
+        case l1 = 1
+        case l2
+        case l3
+        case l4
+
+        var title: String {
+            switch self {
+            case .l1:
+                return "L1 字母"
+            case .l2:
+                return "L2 单词"
+            case .l3:
+                return "L3 短语"
+            case .l4:
+                return "L4 句型"
+            }
+        }
+    }
+
+    private enum MatchingRule: CaseIterable {
+        case imageToWord
+        case audioToWord
+        case wordToMeaning
+
+        var title: String {
+            switch self {
+            case .imageToWord:
+                return "图-词匹配"
+            case .audioToWord:
+                return "词-音匹配"
+            case .wordToMeaning:
+                return "词-词组匹配"
+            }
+        }
+    }
+
+    private struct VocabularyItem: Hashable {
+        let emoji: String
+        let word: String
+        let meaning: String
+        let phrase: String
+        let sentence: String
+    }
+
+    private enum LearningTheme: CaseIterable {
+        case animals
+        case colors
+        case foods
+        case family
+        case transport
+
+        var title: String {
+            switch self {
+            case .animals:
+                return "动物"
+            case .colors:
+                return "颜色"
+            case .foods:
+                return "食物"
+            case .family:
+                return "家庭"
+            case .transport:
+                return "交通"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .animals:
+                return "🐾"
+            case .colors:
+                return "🎨"
+            case .foods:
+                return "🍎"
+            case .family:
+                return "🏠"
+            case .transport:
+                return "🚗"
+            }
+        }
+
+        var vocabulary: [VocabularyItem] {
+            switch self {
+            case .animals:
+                return [
+                    VocabularyItem(emoji: "🐶", word: "dog", meaning: "狗", phrase: "a happy dog", sentence: "The dog can run."),
+                    VocabularyItem(emoji: "🐱", word: "cat", meaning: "猫", phrase: "a cute cat", sentence: "The cat is small."),
+                    VocabularyItem(emoji: "🐰", word: "rabbit", meaning: "兔子", phrase: "a white rabbit", sentence: "A rabbit can jump."),
+                    VocabularyItem(emoji: "🐼", word: "panda", meaning: "熊猫", phrase: "a giant panda", sentence: "The panda eats bamboo."),
+                    VocabularyItem(emoji: "🦁", word: "lion", meaning: "狮子", phrase: "a brave lion", sentence: "The lion is strong."),
+                    VocabularyItem(emoji: "🐵", word: "monkey", meaning: "猴子", phrase: "a funny monkey", sentence: "The monkey climbs trees."),
+                    VocabularyItem(emoji: "🐘", word: "elephant", meaning: "大象", phrase: "a big elephant", sentence: "An elephant has a trunk."),
+                    VocabularyItem(emoji: "🐦", word: "bird", meaning: "鸟", phrase: "a blue bird", sentence: "The bird can sing."),
+                    VocabularyItem(emoji: "🐟", word: "fish", meaning: "鱼", phrase: "a small fish", sentence: "The fish swims fast."),
+                    VocabularyItem(emoji: "🐯", word: "tiger", meaning: "老虎", phrase: "a wild tiger", sentence: "The tiger has stripes.")
+                ]
+            case .colors:
+                return [
+                    VocabularyItem(emoji: "🔴", word: "red", meaning: "红色", phrase: "a red ball", sentence: "My hat is red."),
+                    VocabularyItem(emoji: "🟠", word: "orange", meaning: "橙色", phrase: "an orange kite", sentence: "This orange bag is new."),
+                    VocabularyItem(emoji: "🟡", word: "yellow", meaning: "黄色", phrase: "a yellow sun", sentence: "The sun looks yellow."),
+                    VocabularyItem(emoji: "🟢", word: "green", meaning: "绿色", phrase: "green leaves", sentence: "The grass is green."),
+                    VocabularyItem(emoji: "🔵", word: "blue", meaning: "蓝色", phrase: "a blue sky", sentence: "The sky is blue."),
+                    VocabularyItem(emoji: "🟣", word: "purple", meaning: "紫色", phrase: "a purple flower", sentence: "She likes purple shoes."),
+                    VocabularyItem(emoji: "🟤", word: "brown", meaning: "棕色", phrase: "a brown bear", sentence: "The table is brown."),
+                    VocabularyItem(emoji: "⚫️", word: "black", meaning: "黑色", phrase: "a black cat", sentence: "My shoes are black."),
+                    VocabularyItem(emoji: "⚪️", word: "white", meaning: "白色", phrase: "a white cloud", sentence: "The cloud is white."),
+                    VocabularyItem(emoji: "🩷", word: "pink", meaning: "粉色", phrase: "a pink dress", sentence: "The toy is pink.")
+                ]
+            case .foods:
+                return [
+                    VocabularyItem(emoji: "🍎", word: "apple", meaning: "苹果", phrase: "an apple", sentence: "I eat an apple."),
+                    VocabularyItem(emoji: "🍌", word: "banana", meaning: "香蕉", phrase: "a banana", sentence: "The banana is sweet."),
+                    VocabularyItem(emoji: "🍞", word: "bread", meaning: "面包", phrase: "warm bread", sentence: "We have bread for breakfast."),
+                    VocabularyItem(emoji: "🥚", word: "egg", meaning: "鸡蛋", phrase: "a boiled egg", sentence: "I can cook an egg."),
+                    VocabularyItem(emoji: "🥛", word: "milk", meaning: "牛奶", phrase: "a cup of milk", sentence: "Drink milk every day."),
+                    VocabularyItem(emoji: "🍚", word: "rice", meaning: "米饭", phrase: "a bowl of rice", sentence: "We eat rice at dinner."),
+                    VocabularyItem(emoji: "🥕", word: "carrot", meaning: "胡萝卜", phrase: "a carrot", sentence: "The rabbit likes carrots."),
+                    VocabularyItem(emoji: "🍅", word: "tomato", meaning: "西红柿", phrase: "a red tomato", sentence: "Tomatoes are juicy."),
+                    VocabularyItem(emoji: "🍓", word: "strawberry", meaning: "草莓", phrase: "fresh strawberry", sentence: "I pick a strawberry."),
+                    VocabularyItem(emoji: "🍕", word: "pizza", meaning: "披萨", phrase: "hot pizza", sentence: "Pizza smells good.")
+                ]
+            case .family:
+                return [
+                    VocabularyItem(emoji: "👨", word: "father", meaning: "爸爸", phrase: "my father", sentence: "My father is kind."),
+                    VocabularyItem(emoji: "👩", word: "mother", meaning: "妈妈", phrase: "my mother", sentence: "My mother can cook."),
+                    VocabularyItem(emoji: "👦", word: "brother", meaning: "哥哥/弟弟", phrase: "my brother", sentence: "My brother plays ball."),
+                    VocabularyItem(emoji: "👧", word: "sister", meaning: "姐姐/妹妹", phrase: "my sister", sentence: "My sister reads books."),
+                    VocabularyItem(emoji: "👴", word: "grandpa", meaning: "爷爷/外公", phrase: "my grandpa", sentence: "Grandpa tells stories."),
+                    VocabularyItem(emoji: "👵", word: "grandma", meaning: "奶奶/外婆", phrase: "my grandma", sentence: "Grandma gives me hugs."),
+                    VocabularyItem(emoji: "👶", word: "baby", meaning: "宝宝", phrase: "a baby", sentence: "The baby is sleeping."),
+                    VocabularyItem(emoji: "🏠", word: "home", meaning: "家", phrase: "my home", sentence: "I love my home."),
+                    VocabularyItem(emoji: "🛏️", word: "bedroom", meaning: "卧室", phrase: "a bedroom", sentence: "This is my bedroom."),
+                    VocabularyItem(emoji: "🍽️", word: "kitchen", meaning: "厨房", phrase: "the kitchen", sentence: "We cook in the kitchen.")
+                ]
+            case .transport:
+                return [
+                    VocabularyItem(emoji: "🚗", word: "car", meaning: "汽车", phrase: "a fast car", sentence: "The car is red."),
+                    VocabularyItem(emoji: "🚌", word: "bus", meaning: "公交车", phrase: "a school bus", sentence: "I go by bus."),
+                    VocabularyItem(emoji: "🚲", word: "bike", meaning: "自行车", phrase: "a small bike", sentence: "I ride my bike."),
+                    VocabularyItem(emoji: "🚆", word: "train", meaning: "火车", phrase: "a long train", sentence: "The train is on time."),
+                    VocabularyItem(emoji: "✈️", word: "plane", meaning: "飞机", phrase: "a big plane", sentence: "The plane flies high."),
+                    VocabularyItem(emoji: "🚢", word: "ship", meaning: "轮船", phrase: "a large ship", sentence: "The ship is on the sea."),
+                    VocabularyItem(emoji: "🚕", word: "taxi", meaning: "出租车", phrase: "a yellow taxi", sentence: "The taxi stops here."),
+                    VocabularyItem(emoji: "🚒", word: "fire truck", meaning: "消防车", phrase: "a fire truck", sentence: "The fire truck is loud."),
+                    VocabularyItem(emoji: "🚁", word: "helicopter", meaning: "直升机", phrase: "a helicopter", sentence: "The helicopter can hover."),
+                    VocabularyItem(emoji: "🚜", word: "tractor", meaning: "拖拉机", phrase: "a green tractor", sentence: "The tractor works on farms.")
+                ]
+            }
+        }
+    }
+
+    private enum LearningRoundStage {
+        case waitingToStart
+        case matching
+        case readyForChain
+        case chainRunning
+    }
+
+    private struct DominoLearningCard {
+        let pairID: Int
+        let primaryText: String
+        let secondaryText: String?
+        let shouldSpeakOnTap: Bool
+        let spokenText: String?
+        let item: VocabularyItem
+    }
     
     private var layout: Layout?
     private var dominos: [DominoNode] = []
@@ -50,6 +234,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var landmarkButton: SKShapeNode?
     private var subtitleLabel: SKLabelNode?
     private var countdownLabel: SKLabelNode?
+    private var statusLabel: SKLabelNode?
+    private var progressLabel: SKLabelNode?
+    private var modeEntryNode: SKNode?
     private var staircaseNode: StaircaseNode?
     
     // Managers and State
@@ -81,8 +268,31 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var selectedDominoNode: DominoNode?
     private var selectedBallColorOptionIndex = 5
     private var selectedGuideLineColorOptionIndex = 5
+    private var hasSelectedModeEntry = false
+    private var learningMode: LearningMode = .learning
+    private var selectedTheme: LearningTheme = .animals
+    private var selectedRule: MatchingRule = .imageToWord
+    private var selectedLevel: DifficultyLevel = .l1
+    private var noPressureMode = true
+    private var learningRoundStage: LearningRoundStage = .waitingToStart
+    private var roundCards: [DominoLearningCard] = []
+    private var cardByDominoID: [ObjectIdentifier: DominoLearningCard] = [:]
+    private var selectedDominoPair: [DominoNode] = []
+    private var matchedPairIDs: Set<Int> = []
+    private var pendingReviewItems: Set<VocabularyItem> = []
+    private var forceReviewRound = false
+    private var masteredWords: Set<String> = []
+    private var roundCorrectCount = 0
+    private var roundWrongCount = 0
+    private var roundStartTimestamp: TimeInterval = 0
+    private var lastRoundStars = 0
+    private var totalStars = 0
+    private var completedRounds = 0
+    private var totalStudyDuration: TimeInterval = 0
+    private var currentStreakDays = 1
     private var flowStateMachine = GameFlowStateMachine()
     private var firstImpactTelemetry = FirstImpactTelemetry()
+    private let speechSynthesizer = AVSpeechSynthesizer()
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "wipo.dominoes", category: "Simulation")
     
     private let dominoColorOptions: [DominoColorOption] = [
@@ -121,12 +331,15 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         guard let targetName = buttonName(at: location) else { return }
         
         switch targetName {
+        case "entryLearningMode":
+            applySelectedLearningMode(.learning, shouldResetRound: true)
+        case "entryChallengeMode":
+            applySelectedLearningMode(.challenge, shouldResetRound: true)
         case "dominoTarget":
             guard !isAnimating else { return }
             guard let domino = touchedDomino(at: location) else { return }
-            selectedDominoNode = domino
             run(SKAction.playSoundFileNamed("click.wav", waitForCompletion: false))
-            presentDominoColorPicker()
+            handleDominoTap(domino)
         case "ball":
             guard !isAnimating else { return }
             run(SKAction.playSoundFileNamed("click.wav", waitForCompletion: false))
@@ -138,17 +351,19 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         case "startButton":
             guard startButtonEnabled else { return }
             run(SKAction.playSoundFileNamed("click.wav", waitForCompletion: false))
-            startAnimation()
-        case "landmarkButton", "towerTarget":
+            handleStartButtonTapped()
+        case "landmarkButton":
+            guard landmarkButtonEnabled else { return }
+            run(SKAction.playSoundFileNamed("click.wav", waitForCompletion: false))
+            presentLearningSetupMenu()
+        case "towerTarget":
             guard landmarkButtonEnabled else { return }
             run(SKAction.playSoundFileNamed("click.wav", waitForCompletion: false))
             presentLandmarkPicker()
         case "resetButton":
             guard resetButtonEnabled else { return }
             run(SKAction.playSoundFileNamed("click.wav", waitForCompletion: false))
-            currentBackgroundIndex = (currentBackgroundIndex + 1) % GameConstants.Colors.backgroundGradients.count
-            updateBackground()
-            resetInteractiveElements()
+            presentParentPanel()
         default:
             break
         }
@@ -170,9 +385,11 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         let subtitle = makeSubtitle()
         addChild(subtitle)
         subtitleLabel = subtitle
+        makeLearningHUD()
         
         makeButtons()
         makeCountdownLabel()
+        makeModeEntryOverlay()
         
         // Prepare reusable textures
         if let layout = layout {
@@ -208,7 +425,16 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         nudgeCount = 0
         lastProgressTime = 0
         hasTriggeredExplosion = false
+        learningRoundStage = .waitingToStart
+        selectedDominoPair.removeAll()
+        matchedPairIDs.removeAll()
+        cardByDominoID.removeAll()
+        roundCorrectCount = 0
+        roundWrongCount = 0
+        roundStartTimestamp = 0
+        lastRoundStars = 0
         flowStateMachine.resetToIdle()
+        roundCards = buildRoundCards()
         
         // Build new dynamic elements
         let ball = makeBall(layout: layout)
@@ -235,9 +461,24 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         makeDominos(layout: layout)
         makeTower(layout: layout)
         
-        setButtonEnabled(resetButton, enabled: true)
-        setButtonEnabled(startButton, enabled: true)
-        setButtonEnabled(landmarkButton, enabled: true)
+        updateSubtitleText()
+        updateProgressText()
+
+        if hasSelectedModeEntry {
+            setButtonEnabled(resetButton, enabled: true)
+            setButtonEnabled(startButton, enabled: true)
+            setButtonEnabled(landmarkButton, enabled: true)
+            updateStartButtonTitle("开始配对")
+            updateStatusText("点击“开始配对”，完成后解锁推倒奖励。")
+            modeEntryNode?.removeFromParent()
+        } else {
+            setButtonEnabled(resetButton, enabled: false)
+            setButtonEnabled(startButton, enabled: false)
+            setButtonEnabled(landmarkButton, enabled: false)
+            updateStartButtonTitle("先选模式")
+            updateStatusText("先选择“学习模式”或“挑战模式”。")
+            makeModeEntryOverlay()
+        }
     }
     
     private func resetScene() {
@@ -255,9 +496,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         
         let chainWidth = sceneWidth * (isWide ? 0.64 : 0.62)
         let spacing = chainWidth / CGFloat(GameConstants.Geometry.numDominos - 1)
-        let dominoWidth = clamp(sceneWidth * 0.016, min: 10, max: 18)
-        let baseDominoHeight = sceneHeight * 0.10
-        let heightIncrement = sceneHeight * 0.015
+        let dominoWidth = clamp(sceneWidth * 0.022, min: 14, max: 24)
+        let baseDominoHeight = sceneHeight * 0.11
+        let heightIncrement = sceneHeight * 0.013
         
         let towerX = startX + chainWidth + sceneWidth * (isWide ? 0.06 : 0.08)
         let towerWidth = sceneWidth * (isWide ? 0.10 : 0.12)
@@ -420,7 +661,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private func makeTitle() -> SKLabelNode {
         let currentLayout = layout ?? makeLayout(for: size)
         let label = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
-        label.text = "多米诺骨牌效应"
+        label.text = "多米诺英语启蒙"
         label.fontSize = 28
         label.fontColor = GameConstants.Colors.textTitle
         label.position = CGPoint(x: size.width / 2, y: currentLayout.titleY)
@@ -431,7 +672,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private func makeSubtitle() -> SKLabelNode {
         let currentLayout = layout ?? makeLayout(for: size)
         let label = SKLabelNode(fontNamed: "AvenirNext-Regular")
-        label.text = subtitleText(for: selectedLandmark)
+        label.text = subtitleText()
         label.fontSize = 14
         label.fontColor = GameConstants.Colors.textSubtitle
         label.position = CGPoint(x: size.width / 2, y: currentLayout.subtitleY)
@@ -439,12 +680,13 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         return label
     }
     
-    private func subtitleText(for landmark: TowerNode.Landmark) -> String {
-        "点击“开始模拟”，观看多米诺骨牌击倒\(landmark.displayName)"
+    private func subtitleText() -> String {
+        let mode = hasSelectedModeEntry ? learningMode.title : "待选择"
+        return "\(selectedTheme.icon) \(selectedTheme.title) · \(selectedRule.title) · \(selectedLevel.title) · \(mode)"
     }
     
     private func updateSubtitleText() {
-        subtitleLabel?.text = subtitleText(for: selectedLandmark)
+        subtitleLabel?.text = subtitleText()
     }
     
     private func makeBall(layout: Layout) -> SKShapeNode {
@@ -497,6 +739,20 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             domino.zPosition = 3
             domino.name = "dominoTarget"
             domino.configurePhysics()
+
+            if roundCards.indices.contains(index) {
+                let card = roundCards[index]
+                let content = DominoNode.LearningContent(
+                    primaryText: card.primaryText,
+                    secondaryText: card.secondaryText,
+                    shouldSpeakOnTap: card.shouldSpeakOnTap,
+                    spokenText: card.spokenText
+                )
+                domino.updateLearningContent(content)
+                cardByDominoID[ObjectIdentifier(domino)] = card
+            } else {
+                domino.clearLearningContent()
+            }
             
             addChild(domino)
             dominos.append(domino)
@@ -525,7 +781,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         
         let start = makeButton(
             name: "startButton",
-            title: "开始模拟",
+            title: "开始配对",
             fillColor: GameConstants.Colors.buttonBlueFill,
             textColor: GameConstants.Colors.buttonBlueText,
             layout: currentLayout,
@@ -533,7 +789,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         )
         let landmark = makeButton(
             name: "landmarkButton",
-            title: "选择建筑",
+            title: "词库规则",
             fillColor: SKColor(red: 0.20, green: 0.70, blue: 0.66, alpha: 1.0),
             textColor: SKColor.white,
             layout: currentLayout,
@@ -541,7 +797,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         )
         let reset = makeButton(
             name: "resetButton",
-            title: "切换背景",
+            title: "家长面板",
             fillColor: GameConstants.Colors.buttonGrayFill,
             textColor: GameConstants.Colors.buttonGrayText,
             layout: currentLayout,
@@ -574,6 +830,613 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         label.isHidden = true
         addChild(label)
         countdownLabel = label
+    }
+
+    private var totalPairCount: Int {
+        max(1, roundCards.count / 2)
+    }
+
+    private func makeLearningHUD() {
+        let currentLayout = layout ?? makeLayout(for: size)
+
+        let status = SKLabelNode(fontNamed: "AvenirNext-Medium")
+        status.text = ""
+        status.fontSize = 14
+        status.fontColor = SKColor(white: 0.2, alpha: 0.95)
+        status.position = CGPoint(x: size.width / 2, y: currentLayout.subtitleY - 20)
+        status.zPosition = 7
+        addChild(status)
+        statusLabel = status
+
+        let progress = SKLabelNode(fontNamed: "AvenirNext-Regular")
+        progress.text = ""
+        progress.fontSize = 13
+        progress.fontColor = SKColor(white: 0.26, alpha: 0.92)
+        progress.position = CGPoint(x: size.width / 2, y: currentLayout.subtitleY - 40)
+        progress.zPosition = 7
+        addChild(progress)
+        progressLabel = progress
+    }
+
+    private func makeModeEntryOverlay() {
+        guard !hasSelectedModeEntry else {
+            modeEntryNode?.removeFromParent()
+            return
+        }
+
+        modeEntryNode?.removeFromParent()
+        let container = SKNode()
+        container.zPosition = 40
+
+        let dim = SKShapeNode(rectOf: size, cornerRadius: 0)
+        dim.fillColor = SKColor(white: 0.0, alpha: 0.18)
+        dim.strokeColor = .clear
+        dim.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        container.addChild(dim)
+
+        let panelSize = CGSize(width: min(size.width * 0.78, 420), height: 216)
+        let panel = SKShapeNode(rectOf: panelSize, cornerRadius: 24)
+        panel.fillColor = SKColor(white: 1.0, alpha: 0.95)
+        panel.strokeColor = SKColor(white: 0.85, alpha: 1.0)
+        panel.lineWidth = 1
+        panel.position = CGPoint(x: size.width / 2, y: size.height * 0.54)
+        container.addChild(panel)
+
+        let title = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
+        title.text = "选择模式"
+        title.fontSize = 22
+        title.fontColor = SKColor(white: 0.15, alpha: 1)
+        title.position = CGPoint(x: 0, y: 74)
+        panel.addChild(title)
+
+        let subtitle = SKLabelNode(fontNamed: "AvenirNext-Regular")
+        subtitle.text = "学习模式更温和，挑战模式更紧凑"
+        subtitle.fontSize = 14
+        subtitle.fontColor = SKColor(white: 0.35, alpha: 1)
+        subtitle.position = CGPoint(x: 0, y: 44)
+        panel.addChild(subtitle)
+
+        let optionSize = CGSize(width: panelSize.width * 0.40, height: 60)
+        let learningButton = makeModeEntryButton(
+            name: "entryLearningMode",
+            title: "学习模式",
+            fillColor: SKColor(red: 0.20, green: 0.70, blue: 0.66, alpha: 1.0),
+            size: optionSize
+        )
+        learningButton.position = CGPoint(x: -panelSize.width * 0.24, y: -18)
+        panel.addChild(learningButton)
+
+        let challengeButton = makeModeEntryButton(
+            name: "entryChallengeMode",
+            title: "挑战模式",
+            fillColor: SKColor(red: 0.95, green: 0.53, blue: 0.28, alpha: 1.0),
+            size: optionSize
+        )
+        challengeButton.position = CGPoint(x: panelSize.width * 0.24, y: -18)
+        panel.addChild(challengeButton)
+
+        addChild(container)
+        modeEntryNode = container
+    }
+
+    private func makeModeEntryButton(name: String, title: String, fillColor: SKColor, size: CGSize) -> SKShapeNode {
+        let button = SKShapeNode(rectOf: size, cornerRadius: 16)
+        button.name = name
+        button.fillColor = fillColor
+        button.strokeColor = fillColor
+        button.lineWidth = 0
+
+        let label = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
+        label.text = title
+        label.fontSize = 18
+        label.fontColor = .white
+        label.verticalAlignmentMode = .center
+        label.horizontalAlignmentMode = .center
+        label.name = name
+        button.addChild(label)
+        return button
+    }
+
+    private func updateButtonTitle(_ button: SKShapeNode?, text: String) {
+        guard let button else { return }
+        guard let label = button.children.compactMap({ $0 as? SKLabelNode }).first else { return }
+        label.text = text
+    }
+
+    private func updateStartButtonTitle(_ title: String) {
+        updateButtonTitle(startButton, text: title)
+    }
+
+    private func updateStatusText(_ text: String) {
+        statusLabel?.text = text
+    }
+
+    private func updateProgressText() {
+        let modeText = hasSelectedModeEntry ? learningMode.title : "待选择"
+        let progress = "配对 \(matchedPairIDs.count)/\(totalPairCount) · 错题 \(pendingReviewItems.count) · 已掌握 \(masteredWords.count) · ⭐️\(totalStars)"
+        progressLabel?.text = "\(modeText) | \(progress)"
+    }
+
+    private func applySelectedLearningMode(_ mode: LearningMode, shouldResetRound: Bool) {
+        learningMode = mode
+        hasSelectedModeEntry = true
+        noPressureMode = (mode == .learning)
+
+        modeEntryNode?.removeFromParent()
+        modeEntryNode = nil
+        updateSubtitleText()
+
+        if shouldResetRound {
+            resetInteractiveElements()
+        }
+    }
+
+    private func handleStartButtonTapped() {
+        guard hasSelectedModeEntry else {
+            updateStatusText("请先选择学习模式或挑战模式。")
+            makeModeEntryOverlay()
+            return
+        }
+
+        switch learningRoundStage {
+        case .waitingToStart:
+            beginMatchingRound()
+        case .matching:
+            updateStatusText("先完成全部配对，再触发推倒奖励。")
+        case .readyForChain:
+            startAnimation()
+        case .chainRunning:
+            break
+        }
+    }
+
+    private func beginMatchingRound() {
+        guard hasSelectedModeEntry else { return }
+        guard !isAnimating else { return }
+
+        learningRoundStage = .matching
+        selectedDominoPair.removeAll()
+        roundCorrectCount = 0
+        roundWrongCount = 0
+        roundStartTimestamp = CACurrentMediaTime()
+        updateStartButtonTitle("配对进行中")
+        updateStatusText("点击两张骨牌配对：\(selectedRule.title)")
+        updateProgressText()
+    }
+
+    private func handleDominoTap(_ domino: DominoNode) {
+        guard hasSelectedModeEntry else {
+            updateStatusText("先选择模式，再开始配对。")
+            makeModeEntryOverlay()
+            return
+        }
+
+        guard !domino.isMatchedForLearning else { return }
+        guard let card = cardByDominoID[ObjectIdentifier(domino)] else { return }
+
+        if learningRoundStage == .waitingToStart {
+            beginMatchingRound()
+        }
+
+        guard learningRoundStage == .matching else {
+            if learningRoundStage == .readyForChain {
+                updateStatusText("配对完成，点击“推倒奖励”开始连锁反应。")
+            }
+            return
+        }
+
+        if selectedDominoPair.contains(where: { $0 === domino }) {
+            domino.setLearningSelectionActive(false)
+            selectedDominoPair.removeAll { $0 === domino }
+            return
+        }
+
+        domino.setLearningSelectionActive(true)
+        selectedDominoPair.append(domino)
+
+        if card.shouldSpeakOnTap, let spoken = card.spokenText {
+            speak(spoken)
+        }
+
+        evaluateSelectedPairIfNeeded()
+    }
+
+    private func evaluateSelectedPairIfNeeded() {
+        guard selectedDominoPair.count == 2 else { return }
+        let first = selectedDominoPair[0]
+        let second = selectedDominoPair[1]
+
+        defer {
+            selectedDominoPair.removeAll()
+            updateProgressText()
+        }
+
+        guard
+            let firstCard = cardByDominoID[ObjectIdentifier(first)],
+            let secondCard = cardByDominoID[ObjectIdentifier(second)]
+        else {
+            first.setLearningSelectionActive(false)
+            second.setLearningSelectionActive(false)
+            return
+        }
+
+        if firstCard.pairID == secondCard.pairID {
+            first.setLearningMatched(true)
+            second.setLearningMatched(true)
+            matchedPairIDs.insert(firstCard.pairID)
+            roundCorrectCount += 1
+            masteredWords.insert(firstCard.item.word)
+            pendingReviewItems.remove(firstCard.item)
+            pendingReviewItems.remove(secondCard.item)
+
+            updateStatusText("配对成功：\(firstCard.item.word)")
+            speak(encouragementText())
+
+            if matchedPairIDs.count >= totalPairCount {
+                finishMatchingRound()
+            }
+            return
+        }
+
+        roundWrongCount += 1
+        pendingReviewItems.insert(firstCard.item)
+        pendingReviewItems.insert(secondCard.item)
+
+        let blink = SKAction.sequence([
+            SKAction.fadeAlpha(to: 0.52, duration: 0.08),
+            SKAction.fadeAlpha(to: 1.0, duration: 0.12)
+        ])
+        first.run(blink)
+        second.run(blink)
+        first.setLearningSelectionActive(false)
+        second.setLearningSelectionActive(false)
+
+        if noPressureMode || learningMode == .learning {
+            updateStatusText("再试一次：\(firstCard.item.word) = \(firstCard.item.meaning)")
+        } else {
+            updateStatusText("挑战模式：当前错误 \(roundWrongCount) 次")
+        }
+    }
+
+    private func finishMatchingRound() {
+        guard learningRoundStage == .matching else { return }
+        learningRoundStage = .readyForChain
+
+        let elapsed = max(0.5, CACurrentMediaTime() - roundStartTimestamp)
+        totalStudyDuration += elapsed
+        lastRoundStars = computeStarRating(elapsed: elapsed)
+        totalStars += lastRoundStars
+        completedRounds += 1
+
+        let stars = String(repeating: "⭐️", count: lastRoundStars)
+        updateStartButtonTitle("推倒奖励")
+        updateStatusText("配对完成 \(stars)！点击“推倒奖励”触发连锁。")
+        updateProgressText()
+        speak("Great job")
+    }
+
+    private func computeStarRating(elapsed: TimeInterval) -> Int {
+        let totalAttempts = max(1, roundCorrectCount + roundWrongCount)
+        let accuracy = Double(roundCorrectCount) / Double(totalAttempts)
+        let targetPerPair = learningMode == .challenge ? 4.2 : 5.6
+        let timeScore = elapsed / Double(totalPairCount) <= targetPerPair
+
+        if accuracy >= 0.90 && timeScore { return 3 }
+        if accuracy >= 0.72 { return 2 }
+        return 1
+    }
+
+    private func buildRoundCards() -> [DominoLearningCard] {
+        let pairCount = max(1, GameConstants.Geometry.numDominos / 2)
+        var pool = selectedVocabularyPool()
+        var chosen: [VocabularyItem] = []
+
+        let reviewCandidates = pendingReviewItems.filter { pool.contains($0) }.shuffled()
+        let reviewCap = forceReviewRound ? pairCount : min(2, pairCount)
+        for item in reviewCandidates.prefix(reviewCap) where !chosen.contains(item) {
+            chosen.append(item)
+        }
+
+        pool.shuffle()
+        for item in pool where chosen.count < pairCount {
+            if !chosen.contains(item) {
+                chosen.append(item)
+            }
+        }
+
+        if chosen.count < pairCount {
+            var fallback = selectedTheme.vocabulary.shuffled()
+            while chosen.count < pairCount, let item = fallback.popLast() {
+                if !chosen.contains(item) {
+                    chosen.append(item)
+                }
+            }
+        }
+
+        forceReviewRound = false
+
+        var cards: [DominoLearningCard] = []
+        cards.reserveCapacity(pairCount * 2)
+        for (pairID, item) in chosen.enumerated() {
+            cards.append(contentsOf: cardsForVocabulary(item, pairID: pairID))
+        }
+        cards.shuffle()
+        return cards
+    }
+
+    private func selectedVocabularyPool() -> [VocabularyItem] {
+        let all = selectedTheme.vocabulary
+        switch selectedLevel {
+        case .l1:
+            return Array(all.prefix(8))
+        case .l2:
+            return Array(all.prefix(9))
+        case .l3, .l4:
+            return all
+        }
+    }
+
+    private func cardsForVocabulary(_ item: VocabularyItem, pairID: Int) -> [DominoLearningCard] {
+        switch selectedRule {
+        case .imageToWord:
+            let wordText = selectedLevel == .l1 ? String(item.word.prefix(1)).uppercased() : item.word
+            return [
+                DominoLearningCard(
+                    pairID: pairID,
+                    primaryText: item.emoji,
+                    secondaryText: "图片",
+                    shouldSpeakOnTap: true,
+                    spokenText: item.word,
+                    item: item
+                ),
+                DominoLearningCard(
+                    pairID: pairID,
+                    primaryText: wordText,
+                    secondaryText: selectedLevel.rawValue >= 3 ? item.meaning : nil,
+                    shouldSpeakOnTap: true,
+                    spokenText: item.word,
+                    item: item
+                )
+            ]
+        case .audioToWord:
+            let wordText = selectedLevel == .l1 ? String(item.word.prefix(1)).uppercased() : item.word
+            return [
+                DominoLearningCard(
+                    pairID: pairID,
+                    primaryText: "🔊",
+                    secondaryText: "listen",
+                    shouldSpeakOnTap: true,
+                    spokenText: item.word,
+                    item: item
+                ),
+                DominoLearningCard(
+                    pairID: pairID,
+                    primaryText: wordText,
+                    secondaryText: selectedLevel.rawValue >= 2 ? item.meaning : nil,
+                    shouldSpeakOnTap: true,
+                    spokenText: item.word,
+                    item: item
+                )
+            ]
+        case .wordToMeaning:
+            let target: (primary: String, secondary: String?) = {
+                switch selectedLevel {
+                case .l1:
+                    return (String(item.word.prefix(1)).uppercased(), nil)
+                case .l2:
+                    return (item.meaning, nil)
+                case .l3:
+                    return (item.phrase, nil)
+                case .l4:
+                    return (item.sentence, nil)
+                }
+            }()
+
+            return [
+                DominoLearningCard(
+                    pairID: pairID,
+                    primaryText: item.word,
+                    secondaryText: selectedLevel == .l4 ? "word" : nil,
+                    shouldSpeakOnTap: true,
+                    spokenText: item.word,
+                    item: item
+                ),
+                DominoLearningCard(
+                    pairID: pairID,
+                    primaryText: target.primary,
+                    secondaryText: target.secondary,
+                    shouldSpeakOnTap: false,
+                    spokenText: nil,
+                    item: item
+                )
+            ]
+        }
+    }
+
+    private func speak(_ text: String, language: String = "en-US") {
+        guard !text.isEmpty else { return }
+        if speechSynthesizer.isSpeaking {
+            speechSynthesizer.stopSpeaking(at: .immediate)
+        }
+
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = AVSpeechSynthesisVoice(language: language)
+        utterance.rate = 0.48
+        utterance.pitchMultiplier = 1.06
+        speechSynthesizer.speak(utterance)
+    }
+
+    private func encouragementText() -> String {
+        let options = ["Great", "Nice match", "Awesome", "Well done"]
+        return options.randomElement() ?? "Great"
+    }
+
+    private func presentLearningSetupMenu() {
+        guard hasSelectedModeEntry else {
+            makeModeEntryOverlay()
+            return
+        }
+        guard let presenter = presentingViewController() else { return }
+
+        let alert = UIAlertController(title: "学习设置", message: "调整词库、规则、关卡与模式", preferredStyle: .actionSheet)
+        alert.addAction(UIAlertAction(title: "主题词库：\(selectedTheme.icon) \(selectedTheme.title)", style: .default) { [weak self] _ in
+            self?.presentThemePicker()
+        })
+        alert.addAction(UIAlertAction(title: "配对规则：\(selectedRule.title)", style: .default) { [weak self] _ in
+            self?.presentRulePicker()
+        })
+        alert.addAction(UIAlertAction(title: "关卡：\(selectedLevel.title)", style: .default) { [weak self] _ in
+            self?.presentLevelPicker()
+        })
+        alert.addAction(UIAlertAction(title: "模式：\(learningMode.title)", style: .default) { [weak self] _ in
+            self?.presentModePicker()
+        })
+        alert.addAction(UIAlertAction(title: "奖励建筑：\(selectedLandmark.displayName)", style: .default) { [weak self] _ in
+            self?.presentLandmarkPicker()
+        })
+        alert.addAction(UIAlertAction(title: "切换背景", style: .default) { [weak self] _ in
+            guard let self else { return }
+            self.currentBackgroundIndex = (self.currentBackgroundIndex + 1) % GameConstants.Colors.backgroundGradients.count
+            self.updateBackground()
+        })
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+
+        if let popover = alert.popoverPresentationController, let sceneView = view {
+            popover.sourceView = sceneView
+            let anchor = landmarkButton?.position ?? CGPoint(x: size.width / 2, y: size.height * 0.08)
+            let anchorInView = convertPoint(toView: anchor)
+            popover.sourceRect = CGRect(x: anchorInView.x, y: anchorInView.y, width: 1, height: 1)
+            popover.permittedArrowDirections = [.up, .down]
+        }
+
+        presenter.present(alert, animated: true)
+    }
+
+    private func presentThemePicker() {
+        guard let presenter = presentingViewController() else { return }
+        let alert = UIAlertController(title: "选择主题词库", message: nil, preferredStyle: .actionSheet)
+        for theme in LearningTheme.allCases {
+            let title = theme == selectedTheme ? "\(theme.icon) \(theme.title) ✓" : "\(theme.icon) \(theme.title)"
+            alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
+                guard let self else { return }
+                self.selectedTheme = theme
+                self.resetInteractiveElements()
+            })
+        }
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        configurePopoverIfNeeded(for: alert, anchor: landmarkButton?.position ?? CGPoint(x: size.width / 2, y: size.height * 0.08))
+        presenter.present(alert, animated: true)
+    }
+
+    private func presentRulePicker() {
+        guard let presenter = presentingViewController() else { return }
+        let alert = UIAlertController(title: "选择配对规则", message: nil, preferredStyle: .actionSheet)
+        for rule in MatchingRule.allCases {
+            let title = rule == selectedRule ? "\(rule.title) ✓" : rule.title
+            alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
+                guard let self else { return }
+                self.selectedRule = rule
+                self.resetInteractiveElements()
+            })
+        }
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        configurePopoverIfNeeded(for: alert, anchor: landmarkButton?.position ?? CGPoint(x: size.width / 2, y: size.height * 0.08))
+        presenter.present(alert, animated: true)
+    }
+
+    private func presentLevelPicker() {
+        guard let presenter = presentingViewController() else { return }
+        let alert = UIAlertController(title: "选择关卡难度", message: nil, preferredStyle: .actionSheet)
+        for level in DifficultyLevel.allCases {
+            let title = level == selectedLevel ? "\(level.title) ✓" : level.title
+            alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
+                guard let self else { return }
+                self.selectedLevel = level
+                self.resetInteractiveElements()
+            })
+        }
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        configurePopoverIfNeeded(for: alert, anchor: landmarkButton?.position ?? CGPoint(x: size.width / 2, y: size.height * 0.08))
+        presenter.present(alert, animated: true)
+    }
+
+    private func presentModePicker() {
+        guard let presenter = presentingViewController() else { return }
+        let alert = UIAlertController(title: "切换模式", message: nil, preferredStyle: .actionSheet)
+        for mode in LearningMode.allCases {
+            let title = mode == learningMode ? "\(mode.title) ✓" : mode.title
+            alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
+                self?.applySelectedLearningMode(mode, shouldResetRound: true)
+            })
+        }
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        configurePopoverIfNeeded(for: alert, anchor: landmarkButton?.position ?? CGPoint(x: size.width / 2, y: size.height * 0.08))
+        presenter.present(alert, animated: true)
+    }
+
+    private func presentParentPanel() {
+        guard hasSelectedModeEntry else {
+            makeModeEntryOverlay()
+            return
+        }
+        guard let presenter = presentingViewController() else { return }
+
+        let wrongWords = pendingReviewItems.map(\.word).sorted()
+        let wrongPreview = wrongWords.prefix(4).joined(separator: ", ")
+        let message = """
+        模式：\(learningMode.title)
+        无压力模式：\(noPressureMode ? "已开启" : "已关闭")
+        累计关卡：\(completedRounds)
+        连续学习天数：\(currentStreakDays)
+        学习时长：\(formattedDuration(totalStudyDuration))
+        已掌握词数：\(masteredWords.count)
+        最近错词：\(wrongPreview.isEmpty ? "无" : wrongPreview)
+        """
+
+        let alert = UIAlertController(title: "家长面板", message: message, preferredStyle: .actionSheet)
+        let toggleTitle = noPressureMode ? "关闭无压力模式" : "开启无压力模式"
+        alert.addAction(UIAlertAction(title: toggleTitle, style: .default) { [weak self] _ in
+            guard let self else { return }
+            self.noPressureMode.toggle()
+            self.updateStatusText(self.noPressureMode ? "无压力模式已开启。" : "无压力模式已关闭。")
+        })
+        if !pendingReviewItems.isEmpty {
+            alert.addAction(UIAlertAction(title: "开始错词复习关", style: .default) { [weak self] _ in
+                self?.startReviewRound()
+            })
+        }
+        alert.addAction(UIAlertAction(title: "恢复默认学习设置", style: .destructive) { [weak self] _ in
+            guard let self else { return }
+            self.selectedRule = .imageToWord
+            self.selectedLevel = .l1
+            self.noPressureMode = true
+            self.resetInteractiveElements()
+        })
+        alert.addAction(UIAlertAction(title: "关闭", style: .cancel))
+
+        if let popover = alert.popoverPresentationController, let sceneView = view {
+            popover.sourceView = sceneView
+            let anchor = resetButton?.position ?? CGPoint(x: size.width / 2, y: size.height * 0.08)
+            let anchorInView = convertPoint(toView: anchor)
+            popover.sourceRect = CGRect(x: anchorInView.x, y: anchorInView.y, width: 1, height: 1)
+            popover.permittedArrowDirections = [.up, .down]
+        }
+
+        presenter.present(alert, animated: true)
+    }
+
+    private func startReviewRound() {
+        guard !pendingReviewItems.isEmpty else { return }
+        forceReviewRound = true
+        resetInteractiveElements()
+        updateStatusText("已开启错词复习关。")
+    }
+
+    private func formattedDuration(_ duration: TimeInterval) -> String {
+        let total = max(0, Int(duration.rounded()))
+        let minutes = total / 60
+        let seconds = total % 60
+        return String(format: "%02d:%02d", minutes, seconds)
     }
     
     private func makeButton(name: String, title: String, fillColor: SKColor, textColor: SKColor, layout: Layout, width: CGFloat) -> SKShapeNode {
@@ -683,6 +1546,14 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             responder = current.next
         }
         return nil
+    }
+
+    private func configurePopoverIfNeeded(for alert: UIAlertController, anchor: CGPoint) {
+        guard let popover = alert.popoverPresentationController, let sceneView = view else { return }
+        popover.sourceView = sceneView
+        let anchorInView = convertPoint(toView: anchor)
+        popover.sourceRect = CGRect(x: anchorInView.x, y: anchorInView.y, width: 1, height: 1)
+        popover.permittedArrowDirections = [.up, .down]
     }
     
     private func touchedDomino(at location: CGPoint) -> DominoNode? {
@@ -840,7 +1711,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     
     private func startAnimation() {
         guard !isAnimating, let layout = layout else { return }
+        guard learningRoundStage == .readyForChain else { return }
         guard flowStateMachine.startSimulation() else { return }
+        learningRoundStage = .chainRunning
         isAnimating = true
         removeAction(forKey: GameConstants.autoResetActionKey)
         removeAction(forKey: chainWatchdogActionKey)
@@ -849,6 +1722,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         towerNode?.removeAction(forKey: towerToppleActionKey)
         countdownLabel?.text = ""
         setButtonEnabled(startButton, enabled: false)
+        updateStartButtonTitle("连锁进行中")
         // Disable settings while animating
         setButtonEnabled(resetButton, enabled: false)
         setButtonEnabled(landmarkButton, enabled: false)
@@ -1433,9 +2307,13 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         removeAction(forKey: firstImpactAssistActionKey)
         removeAction(forKey: firstImpactFallbackActionKey)
         isAnimating = false
+        learningRoundStage = .waitingToStart
         logger.info(
             "Run \(self.firstImpactTelemetry.runID) finished. fallen=\(self.fallenCount), directAssist=\(self.firstImpactTelemetry.directAssistCount), fallbackAssist=\(self.firstImpactTelemetry.fallbackAssistCount)"
         )
+        let stars = String(repeating: "⭐️", count: max(1, lastRoundStars))
+        updateStatusText("连锁完成！本关星级：\(stars)")
+        updateProgressText()
         setButtonEnabled(resetButton, enabled: true)
         setButtonEnabled(landmarkButton, enabled: true)
 

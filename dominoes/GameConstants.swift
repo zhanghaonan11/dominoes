@@ -97,7 +97,7 @@ struct GameConstants {
     }
     
     struct Geometry {
-        static let numDominos = 15
+        static let numDominos = 14
         static let autoResetDelay: Int = 3
     }
     
