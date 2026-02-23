@@ -4,33 +4,70 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A domino puzzle game for children (aimed at 4-year-olds) to learn English letters and numbers. Players place dominoes showing letters (A-Z) and numbers (0-9), then push the first domino to trigger a chain reaction. The game includes famous landmarks that explode with particle effects when hit by the last domino.
+A domino chain-reaction game for children (aimed at 4-year-olds) to learn English vocabulary. Players see dominoes with emoji icons from themed categories (animals, fruits, colors, etc.), tap to customize them, then trigger a ball-roll → domino-chain → landmark-explosion sequence. The game pronounces English words via AVSpeechSynthesizer when items are selected.
 
-## Development
+The project has two implementations: a **primary iOS SpriteKit app** (`dominoes/`) and a legacy **web prototype** (`js/`, `index.html`). Active development is on the iOS app.
 
-This is a vanilla JavaScript browser game with no build system or package manager.
+## Build & Test
 
-**To run:** Open `index.html` directly in a browser, or use any static file server.
+```bash
+# Build (iOS Simulator)
+xcodebuild -project dominoes.xcodeproj -scheme dominoes -destination 'platform=iOS Simulator,name=iPhone 16' build
 
-**No tests or linting configured.**
+# Run tests
+xcodebuild -project dominoes.xcodeproj -scheme dominoes -destination 'platform=iOS Simulator,name=iPhone 16' test
 
-## Architecture
+# Run a single test class
+xcodebuild -project dominoes.xcodeproj -scheme dominoes -destination 'platform=iOS Simulator,name=iPhone 16' test -only-testing:dominoesTests/GameFlowStateMachineTests
+```
 
-The game uses four main classes that work together:
+No package manager (SPM/CocoaPods). No linting configured.
 
-- **DominoGame** (`js/main.js`) - Main game controller. Manages the game loop, handles user input (domino/building selection, canvas clicks), coordinates between physics and rendering. Entry point initialized on DOMContentLoaded.
+## iOS App Architecture (SpriteKit)
 
-- **Domino** (`js/domino.js`) - Individual domino pieces with physics properties (angle, angular velocity, fall direction). Handles its own rendering and collision detection via `containsPoint()` and `checkCollision()`.
+Entry: `AppDelegate` → `GameViewController` (presents `GameScene` via Main.storyboard's `SKView`).
 
-- **PhysicsEngine** (`js/physics.js`) - Manages the chain reaction simulation. Uses callbacks (`onDominoFall`, `onComplete`) to notify the game controller when dominoes fall. Key method is `update()` which processes collision between consecutive dominoes.
+### Core Classes
 
-- **Building** (`js/building.js`) - Famous landmarks (Eiffel Tower, Pyramid, etc.) that can be placed at the end of a domino chain. Contains explosion particle system for celebration effect.
+- **GameScene** (`GameScene.swift`, ~1900 lines) — The monolithic scene. Owns all game state, UI construction, touch handling, physics contact delegation, animation sequencing, particle explosions, and auto-reset countdown. Uses `SKPhysicsContactDelegate` for domino collision events. Layout adapts to wide vs. tall screens via the internal `Layout` struct.
 
-- **AudioManager** (`js/audio.js`) - Uses Web Speech API to pronounce letters/numbers in English and Web Audio API for sound effects. Maintains a queue for speech synthesis.
+- **DominoNode** (`DominoNode.swift`) — `SKNode` subclass for a single domino tile. Wraps an `SKSpriteNode` (texture-based for performance) with physics body anchored at bottom-right for natural rotation. Tracks `hasFallen` state. Generates a shared base texture via `createBaseTexture()`.
 
-## Key Mechanics
+- **TowerNode** (`TowerNode.swift`) — Static factory that builds vector-art landmarks (10 total: Eiffel Tower, Big Ben, Pyramid, etc.) from `SKShapeNode` primitives. Caches rendered textures per landmark+width to avoid re-rasterizing. Each landmark has a `heightFactor` used for layout sizing.
 
-- Dominoes are auto-positioned left-to-right with progressive size increase (8% larger per domino)
-- Ground line is at canvas vertical center (`canvas.height / 2`)
-- Physics uses simple angular acceleration; collision triggers when domino angle exceeds PI/6 and top position overlaps next domino
-- All text and UI is in Chinese; letter/number pronunciation is in English
+- **StaircaseNode** (`StaircaseNode.swift`) — Builds the ball's descent path as a smooth Catmull-Rom-like curve. Exposes `rollPath: [StairPathPoint]` used by `GameScene` to animate the ball along the staircase before physics takes over.
+
+- **GameFlowStateMachine** (`GameFlowStateMachine.swift`) — Pure value-type state machine: `idle → animating → firstImpact → autoResetCountdown(n) → idle`. Enforces valid transitions. Tested in `dominoesTests/`.
+
+- **GameConstants** (`GameConstants.swift`) — All physics tuning (mass, friction, restitution, damping, stall detection), collision bitmasks, colors, and geometry constants.
+
+### Game Flow
+
+1. Scene builds static elements (background gradient, clouds, ground, title, buttons) once in `buildStaticSceneOnce()`
+2. `resetInteractiveElements()` creates dominos, ball, staircase, and tower fresh each round
+3. "开始模拟" button → `startAnimation()` → ball animates along staircase path → `scheduleDirectFirstImpact()` teleports ball to first domino and applies impulse
+4. Chain watchdog (`checkChainProgressAndNudgeIfNeeded()`) runs every 0.6s, nudges stuck dominos for kid-friendly reliability
+5. After all dominos fall → tower topples → `explodeScene()` particle effects → auto-reset countdown
+
+### Physics
+
+- SpriteKit's built-in physics engine (not custom). Gravity: `(0, -9.2)`.
+- Collision categories: `domino (1)`, `ball (2)`, `ground (4)`, `tower (8)`
+- Ball physics disabled during staircase animation, enabled at first impact
+- Fallen detection: domino angle exceeds 38° threshold
+- Anti-stall: max 1 nudge per chain run, applies angular + linear impulse to next standing domino
+
+### Learning Content
+
+12 themed categories (colors, transportation, fruits, animals, plants, space, body, family, food, shapes, weather, sports) with 8-10 items each. Each item has emoji icon, English name, Chinese name, and associated color. Tapping a domino opens a `UIAlertController` picker to change its learning item.
+
+## Web Version (Legacy)
+
+Vanilla JS, no build system. Open `index.html` in a browser. Uses custom physics in `js/physics.js`, Web Speech API for pronunciation. Classes: `DominoGame` (main.js), `Domino` (domino.js), `PhysicsEngine` (physics.js), `Building` (building.js), `AudioManager` (audio.js).
+
+## Key Conventions
+
+- All UI text is in Chinese; English is only for speech pronunciation
+- Sound effects: `click.wav`, `hit.wav`, `roll.wav`, `explode.wav` in `dominoes/Sounds/`
+- Particle system adapts budget based on device memory and low-power mode
+- TowerNode textures are cached in a static dictionary keyed by landmark+pixelWidth

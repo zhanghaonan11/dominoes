@@ -8,6 +8,7 @@
 import SpriteKit
 import UIKit
 import os
+import AVFoundation
 
 final class GameScene: SKScene, SKPhysicsContactDelegate {
     private struct Layout {
@@ -30,7 +31,22 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     
     private struct DominoColorOption {
         let name: String
+        let englishName: String
         let color: SKColor
+    }
+
+    private struct LearningItem {
+        let icon: String
+        let englishName: String
+        let chineseName: String
+        let color: SKColor
+    }
+
+    private struct LearningCategory {
+        let icon: String
+        let displayName: String
+        let englishName: String
+        let items: [LearningItem]
     }
 
     private struct FirstImpactTelemetry {
@@ -48,6 +64,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var startButton: SKShapeNode?
     private var resetButton: SKShapeNode?
     private var landmarkButton: SKShapeNode?
+    private var categoryButton: SKShapeNode?
     private var subtitleLabel: SKLabelNode?
     private var countdownLabel: SKLabelNode?
     private var staircaseNode: StaircaseNode?
@@ -76,26 +93,215 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var startButtonEnabled = false
     private var resetButtonEnabled = false
     private var landmarkButtonEnabled = false
+    private var categoryButtonEnabled = false
     
     private var selectedLandmark: TowerNode.Landmark = .eiffelTower
     private var selectedDominoNode: DominoNode?
+    private var selectedDominoLearningItemIndices: [Int] = []
+    private var selectedLearningCategoryIndex = 0
     private var selectedBallColorOptionIndex = 5
     private var selectedGuideLineColorOptionIndex = 5
     private var flowStateMachine = GameFlowStateMachine()
     private var firstImpactTelemetry = FirstImpactTelemetry()
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "wipo.dominoes", category: "Simulation")
+    private let speechSynthesizer = AVSpeechSynthesizer()
     
     private let dominoColorOptions: [DominoColorOption] = [
-        DominoColorOption(name: "🟥 red", color: SKColor(red: 0.90, green: 0.18, blue: 0.19, alpha: 1.0)),
-        DominoColorOption(name: "🟧 orange", color: SKColor(red: 0.97, green: 0.49, blue: 0.13, alpha: 1.0)),
-        DominoColorOption(name: "🟨 yellow", color: SKColor(red: 0.95, green: 0.78, blue: 0.17, alpha: 1.0)),
-        DominoColorOption(name: "🟩 green", color: SKColor(red: 0.12, green: 0.72, blue: 0.39, alpha: 1.0)),
-        DominoColorOption(name: "🟦 cyan", color: SKColor(red: 0.08, green: 0.71, blue: 0.68, alpha: 1.0)),
-        DominoColorOption(name: "🟦 blue", color: SKColor(red: 0.18, green: 0.55, blue: 0.96, alpha: 1.0)),
-        DominoColorOption(name: "🟦 navy", color: SKColor(red: 0.12, green: 0.33, blue: 0.76, alpha: 1.0)),
-        DominoColorOption(name: "🟪 purple", color: SKColor(red: 0.57, green: 0.31, blue: 0.89, alpha: 1.0)),
-        DominoColorOption(name: "🩷 pink", color: SKColor(red: 0.90, green: 0.23, blue: 0.59, alpha: 1.0)),
-        DominoColorOption(name: "⬛ black", color: SKColor(red: 0.22, green: 0.24, blue: 0.29, alpha: 1.0))
+        DominoColorOption(name: "🟥 red", englishName: "red", color: SKColor(red: 0.90, green: 0.18, blue: 0.19, alpha: 1.0)),
+        DominoColorOption(name: "🟧 orange", englishName: "orange", color: SKColor(red: 0.97, green: 0.49, blue: 0.13, alpha: 1.0)),
+        DominoColorOption(name: "🟨 yellow", englishName: "yellow", color: SKColor(red: 0.95, green: 0.78, blue: 0.17, alpha: 1.0)),
+        DominoColorOption(name: "🟩 green", englishName: "green", color: SKColor(red: 0.12, green: 0.72, blue: 0.39, alpha: 1.0)),
+        DominoColorOption(name: "🩵 cyan", englishName: "cyan", color: SKColor(red: 0.08, green: 0.71, blue: 0.68, alpha: 1.0)),
+        DominoColorOption(name: "🟦 blue", englishName: "blue", color: SKColor(red: 0.18, green: 0.55, blue: 0.96, alpha: 1.0)),
+        DominoColorOption(name: "🔷 navy", englishName: "navy", color: SKColor(red: 0.09, green: 0.20, blue: 0.52, alpha: 1.0)),
+        DominoColorOption(name: "🟪 purple", englishName: "purple", color: SKColor(red: 0.57, green: 0.31, blue: 0.89, alpha: 1.0)),
+        DominoColorOption(name: "🩷 pink", englishName: "pink", color: SKColor(red: 0.90, green: 0.23, blue: 0.59, alpha: 1.0)),
+        DominoColorOption(name: "⬛ black", englishName: "black", color: SKColor(red: 0.22, green: 0.24, blue: 0.29, alpha: 1.0))
+    ]
+
+    private let learningCategories: [LearningCategory] = [
+        LearningCategory(
+            icon: "🎨",
+            displayName: "颜色",
+            englishName: "colors",
+            items: [
+                LearningItem(icon: "🟥", englishName: "red", chineseName: "红色", color: SKColor(red: 0.90, green: 0.18, blue: 0.19, alpha: 1.0)),
+                LearningItem(icon: "🟧", englishName: "orange", chineseName: "橙色", color: SKColor(red: 0.97, green: 0.49, blue: 0.13, alpha: 1.0)),
+                LearningItem(icon: "🟨", englishName: "yellow", chineseName: "黄色", color: SKColor(red: 0.95, green: 0.78, blue: 0.17, alpha: 1.0)),
+                LearningItem(icon: "🟩", englishName: "green", chineseName: "绿色", color: SKColor(red: 0.12, green: 0.72, blue: 0.39, alpha: 1.0)),
+                LearningItem(icon: "🩵", englishName: "cyan", chineseName: "青色", color: SKColor(red: 0.08, green: 0.71, blue: 0.68, alpha: 1.0)),
+                LearningItem(icon: "🟦", englishName: "blue", chineseName: "蓝色", color: SKColor(red: 0.18, green: 0.55, blue: 0.96, alpha: 1.0)),
+                LearningItem(icon: "🔷", englishName: "navy", chineseName: "藏蓝色", color: SKColor(red: 0.09, green: 0.20, blue: 0.52, alpha: 1.0)),
+                LearningItem(icon: "🟪", englishName: "purple", chineseName: "紫色", color: SKColor(red: 0.57, green: 0.31, blue: 0.89, alpha: 1.0)),
+                LearningItem(icon: "🩷", englishName: "pink", chineseName: "粉色", color: SKColor(red: 0.90, green: 0.23, blue: 0.59, alpha: 1.0)),
+                LearningItem(icon: "⬛", englishName: "black", chineseName: "黑色", color: SKColor(red: 0.22, green: 0.24, blue: 0.29, alpha: 1.0))
+            ]
+        ),
+        LearningCategory(
+            icon: "🚗",
+            displayName: "交通",
+            englishName: "transportation",
+            items: [
+                LearningItem(icon: "🚗", englishName: "car", chineseName: "汽车", color: SKColor(red: 0.97, green: 0.58, blue: 0.44, alpha: 1.0)),
+                LearningItem(icon: "🚌", englishName: "bus", chineseName: "公交车", color: SKColor(red: 0.99, green: 0.75, blue: 0.34, alpha: 1.0)),
+                LearningItem(icon: "🚲", englishName: "bike", chineseName: "自行车", color: SKColor(red: 0.48, green: 0.83, blue: 0.50, alpha: 1.0)),
+                LearningItem(icon: "🚂", englishName: "train", chineseName: "火车", color: SKColor(red: 0.46, green: 0.71, blue: 0.94, alpha: 1.0)),
+                LearningItem(icon: "✈️", englishName: "plane", chineseName: "飞机", color: SKColor(red: 0.67, green: 0.64, blue: 0.93, alpha: 1.0)),
+                LearningItem(icon: "🚢", englishName: "ship", chineseName: "轮船", color: SKColor(red: 0.39, green: 0.77, blue: 0.82, alpha: 1.0)),
+                LearningItem(icon: "🚕", englishName: "taxi", chineseName: "出租车", color: SKColor(red: 0.98, green: 0.86, blue: 0.39, alpha: 1.0)),
+                LearningItem(icon: "🚜", englishName: "tractor", chineseName: "拖拉机", color: SKColor(red: 0.72, green: 0.83, blue: 0.44, alpha: 1.0))
+            ]
+        ),
+        LearningCategory(
+            icon: "🍎",
+            displayName: "水果",
+            englishName: "fruits",
+            items: [
+                LearningItem(icon: "🍎", englishName: "apple", chineseName: "苹果", color: SKColor(red: 0.97, green: 0.47, blue: 0.47, alpha: 1.0)),
+                LearningItem(icon: "🍌", englishName: "banana", chineseName: "香蕉", color: SKColor(red: 0.98, green: 0.87, blue: 0.37, alpha: 1.0)),
+                LearningItem(icon: "🍊", englishName: "orange", chineseName: "橙子", color: SKColor(red: 0.99, green: 0.66, blue: 0.32, alpha: 1.0)),
+                LearningItem(icon: "🍇", englishName: "grape", chineseName: "葡萄", color: SKColor(red: 0.73, green: 0.56, blue: 0.92, alpha: 1.0)),
+                LearningItem(icon: "🍓", englishName: "strawberry", chineseName: "草莓", color: SKColor(red: 0.94, green: 0.38, blue: 0.56, alpha: 1.0)),
+                LearningItem(icon: "🍉", englishName: "watermelon", chineseName: "西瓜", color: SKColor(red: 0.47, green: 0.82, blue: 0.50, alpha: 1.0)),
+                LearningItem(icon: "🍐", englishName: "pear", chineseName: "梨", color: SKColor(red: 0.79, green: 0.86, blue: 0.38, alpha: 1.0)),
+                LearningItem(icon: "🥝", englishName: "kiwi", chineseName: "猕猴桃", color: SKColor(red: 0.54, green: 0.76, blue: 0.39, alpha: 1.0))
+            ]
+        ),
+        LearningCategory(
+            icon: "🐶",
+            displayName: "动物",
+            englishName: "animals",
+            items: [
+                LearningItem(icon: "🐶", englishName: "dog", chineseName: "小狗", color: SKColor(red: 0.96, green: 0.73, blue: 0.50, alpha: 1.0)),
+                LearningItem(icon: "🐱", englishName: "cat", chineseName: "小猫", color: SKColor(red: 0.97, green: 0.66, blue: 0.47, alpha: 1.0)),
+                LearningItem(icon: "🐰", englishName: "rabbit", chineseName: "兔子", color: SKColor(red: 0.98, green: 0.80, blue: 0.87, alpha: 1.0)),
+                LearningItem(icon: "🐻", englishName: "bear", chineseName: "熊", color: SKColor(red: 0.84, green: 0.65, blue: 0.48, alpha: 1.0)),
+                LearningItem(icon: "🦁", englishName: "lion", chineseName: "狮子", color: SKColor(red: 0.98, green: 0.76, blue: 0.41, alpha: 1.0)),
+                LearningItem(icon: "🐼", englishName: "panda", chineseName: "熊猫", color: SKColor(red: 0.77, green: 0.79, blue: 0.82, alpha: 1.0)),
+                LearningItem(icon: "🐢", englishName: "turtle", chineseName: "乌龟", color: SKColor(red: 0.51, green: 0.82, blue: 0.52, alpha: 1.0)),
+                LearningItem(icon: "🐘", englishName: "elephant", chineseName: "大象", color: SKColor(red: 0.68, green: 0.76, blue: 0.88, alpha: 1.0))
+            ]
+        ),
+        LearningCategory(
+            icon: "🌱",
+            displayName: "植物",
+            englishName: "plants",
+            items: [
+                LearningItem(icon: "🌳", englishName: "tree", chineseName: "树", color: SKColor(red: 0.46, green: 0.73, blue: 0.37, alpha: 1.0)),
+                LearningItem(icon: "🌻", englishName: "sunflower", chineseName: "向日葵", color: SKColor(red: 0.98, green: 0.76, blue: 0.30, alpha: 1.0)),
+                LearningItem(icon: "🌹", englishName: "rose", chineseName: "玫瑰", color: SKColor(red: 0.90, green: 0.32, blue: 0.44, alpha: 1.0)),
+                LearningItem(icon: "🌷", englishName: "tulip", chineseName: "郁金香", color: SKColor(red: 0.92, green: 0.57, blue: 0.63, alpha: 1.0)),
+                LearningItem(icon: "🍀", englishName: "clover", chineseName: "三叶草", color: SKColor(red: 0.36, green: 0.76, blue: 0.42, alpha: 1.0)),
+                LearningItem(icon: "🌿", englishName: "leaf", chineseName: "叶子", color: SKColor(red: 0.39, green: 0.80, blue: 0.46, alpha: 1.0)),
+                LearningItem(icon: "🌵", englishName: "cactus", chineseName: "仙人掌", color: SKColor(red: 0.48, green: 0.72, blue: 0.36, alpha: 1.0)),
+                LearningItem(icon: "🍄", englishName: "mushroom", chineseName: "蘑菇", color: SKColor(red: 0.88, green: 0.45, blue: 0.34, alpha: 1.0))
+            ]
+        ),
+        LearningCategory(
+            icon: "🚀",
+            displayName: "太空",
+            englishName: "space",
+            items: [
+                LearningItem(icon: "☀️", englishName: "sun", chineseName: "太阳", color: SKColor(red: 0.98, green: 0.76, blue: 0.30, alpha: 1.0)),
+                LearningItem(icon: "🌙", englishName: "moon", chineseName: "月亮", color: SKColor(red: 0.84, green: 0.83, blue: 0.63, alpha: 1.0)),
+                LearningItem(icon: "⭐️", englishName: "star", chineseName: "星星", color: SKColor(red: 0.99, green: 0.86, blue: 0.42, alpha: 1.0)),
+                LearningItem(icon: "🪐", englishName: "planet", chineseName: "行星", color: SKColor(red: 0.72, green: 0.57, blue: 0.91, alpha: 1.0)),
+                LearningItem(icon: "🌍", englishName: "earth", chineseName: "地球", color: SKColor(red: 0.43, green: 0.73, blue: 0.91, alpha: 1.0)),
+                LearningItem(icon: "☄️", englishName: "comet", chineseName: "彗星", color: SKColor(red: 0.79, green: 0.81, blue: 0.90, alpha: 1.0)),
+                LearningItem(icon: "🛸", englishName: "ufo", chineseName: "飞碟", color: SKColor(red: 0.68, green: 0.79, blue: 0.88, alpha: 1.0)),
+                LearningItem(icon: "🚀", englishName: "rocket", chineseName: "火箭", color: SKColor(red: 0.90, green: 0.40, blue: 0.43, alpha: 1.0))
+            ]
+        ),
+        LearningCategory(
+            icon: "🧍",
+            displayName: "身体",
+            englishName: "body",
+            items: [
+                LearningItem(icon: "👀", englishName: "eyes", chineseName: "眼睛", color: SKColor(red: 0.50, green: 0.73, blue: 0.90, alpha: 1.0)),
+                LearningItem(icon: "👂", englishName: "ears", chineseName: "耳朵", color: SKColor(red: 0.95, green: 0.76, blue: 0.60, alpha: 1.0)),
+                LearningItem(icon: "👃", englishName: "nose", chineseName: "鼻子", color: SKColor(red: 0.93, green: 0.66, blue: 0.58, alpha: 1.0)),
+                LearningItem(icon: "👄", englishName: "mouth", chineseName: "嘴巴", color: SKColor(red: 0.94, green: 0.45, blue: 0.55, alpha: 1.0)),
+                LearningItem(icon: "✋", englishName: "hand", chineseName: "手", color: SKColor(red: 0.98, green: 0.78, blue: 0.56, alpha: 1.0)),
+                LearningItem(icon: "🦶", englishName: "foot", chineseName: "脚", color: SKColor(red: 0.90, green: 0.65, blue: 0.52, alpha: 1.0)),
+                LearningItem(icon: "🦷", englishName: "tooth", chineseName: "牙齿", color: SKColor(red: 0.86, green: 0.88, blue: 0.92, alpha: 1.0)),
+                LearningItem(icon: "❤️", englishName: "heart", chineseName: "心脏", color: SKColor(red: 0.90, green: 0.33, blue: 0.38, alpha: 1.0))
+            ]
+        ),
+        LearningCategory(
+            icon: "👨‍👩‍👧",
+            displayName: "家庭",
+            englishName: "family",
+            items: [
+                LearningItem(icon: "👨", englishName: "father", chineseName: "爸爸", color: SKColor(red: 0.53, green: 0.74, blue: 0.92, alpha: 1.0)),
+                LearningItem(icon: "👩", englishName: "mother", chineseName: "妈妈", color: SKColor(red: 0.96, green: 0.62, blue: 0.70, alpha: 1.0)),
+                LearningItem(icon: "👦", englishName: "boy", chineseName: "男孩", color: SKColor(red: 0.42, green: 0.73, blue: 0.88, alpha: 1.0)),
+                LearningItem(icon: "👧", englishName: "girl", chineseName: "女孩", color: SKColor(red: 0.94, green: 0.64, blue: 0.74, alpha: 1.0)),
+                LearningItem(icon: "👶", englishName: "baby", chineseName: "宝宝", color: SKColor(red: 0.98, green: 0.78, blue: 0.62, alpha: 1.0)),
+                LearningItem(icon: "👴", englishName: "grandpa", chineseName: "爷爷", color: SKColor(red: 0.74, green: 0.80, blue: 0.86, alpha: 1.0)),
+                LearningItem(icon: "👵", englishName: "grandma", chineseName: "奶奶", color: SKColor(red: 0.86, green: 0.76, blue: 0.84, alpha: 1.0)),
+                LearningItem(icon: "🏠", englishName: "home", chineseName: "家", color: SKColor(red: 0.86, green: 0.68, blue: 0.46, alpha: 1.0))
+            ]
+        ),
+        LearningCategory(
+            icon: "🍽️",
+            displayName: "食物",
+            englishName: "food",
+            items: [
+                LearningItem(icon: "🍚", englishName: "rice", chineseName: "米饭", color: SKColor(red: 0.90, green: 0.88, blue: 0.82, alpha: 1.0)),
+                LearningItem(icon: "🍞", englishName: "bread", chineseName: "面包", color: SKColor(red: 0.90, green: 0.68, blue: 0.46, alpha: 1.0)),
+                LearningItem(icon: "🥚", englishName: "egg", chineseName: "鸡蛋", color: SKColor(red: 0.96, green: 0.86, blue: 0.62, alpha: 1.0)),
+                LearningItem(icon: "🥛", englishName: "milk", chineseName: "牛奶", color: SKColor(red: 0.84, green: 0.90, blue: 0.97, alpha: 1.0)),
+                LearningItem(icon: "🧀", englishName: "cheese", chineseName: "奶酪", color: SKColor(red: 0.98, green: 0.82, blue: 0.36, alpha: 1.0)),
+                LearningItem(icon: "🍜", englishName: "noodles", chineseName: "面条", color: SKColor(red: 0.92, green: 0.72, blue: 0.46, alpha: 1.0)),
+                LearningItem(icon: "🍪", englishName: "cookie", chineseName: "饼干", color: SKColor(red: 0.83, green: 0.62, blue: 0.42, alpha: 1.0)),
+                LearningItem(icon: "🍯", englishName: "honey", chineseName: "蜂蜜", color: SKColor(red: 0.95, green: 0.67, blue: 0.28, alpha: 1.0))
+            ]
+        ),
+        LearningCategory(
+            icon: "🔺",
+            displayName: "形状",
+            englishName: "shapes",
+            items: [
+                LearningItem(icon: "⚪️", englishName: "circle", chineseName: "圆形", color: SKColor(red: 0.86, green: 0.88, blue: 0.92, alpha: 1.0)),
+                LearningItem(icon: "⬜️", englishName: "square", chineseName: "正方形", color: SKColor(red: 0.82, green: 0.90, blue: 0.95, alpha: 1.0)),
+                LearningItem(icon: "🔺", englishName: "triangle", chineseName: "三角形", color: SKColor(red: 0.94, green: 0.46, blue: 0.43, alpha: 1.0)),
+                LearningItem(icon: "🔷", englishName: "diamond", chineseName: "菱形", color: SKColor(red: 0.45, green: 0.68, blue: 0.93, alpha: 1.0)),
+                LearningItem(icon: "🟧", englishName: "rectangle", chineseName: "长方形", color: SKColor(red: 0.95, green: 0.62, blue: 0.33, alpha: 1.0)),
+                LearningItem(icon: "⭐️", englishName: "star", chineseName: "星形", color: SKColor(red: 0.98, green: 0.82, blue: 0.36, alpha: 1.0)),
+                LearningItem(icon: "❤️", englishName: "heart", chineseName: "心形", color: SKColor(red: 0.90, green: 0.35, blue: 0.45, alpha: 1.0)),
+                LearningItem(icon: "🌙", englishName: "crescent", chineseName: "月牙形", color: SKColor(red: 0.84, green: 0.84, blue: 0.66, alpha: 1.0))
+            ]
+        ),
+        LearningCategory(
+            icon: "☀️",
+            displayName: "天气",
+            englishName: "weather",
+            items: [
+                LearningItem(icon: "☀️", englishName: "sunny", chineseName: "晴天", color: SKColor(red: 0.98, green: 0.78, blue: 0.31, alpha: 1.0)),
+                LearningItem(icon: "☁️", englishName: "cloudy", chineseName: "多云", color: SKColor(red: 0.72, green: 0.80, blue: 0.88, alpha: 1.0)),
+                LearningItem(icon: "🌧️", englishName: "rainy", chineseName: "下雨", color: SKColor(red: 0.43, green: 0.62, blue: 0.86, alpha: 1.0)),
+                LearningItem(icon: "⛈️", englishName: "stormy", chineseName: "雷雨", color: SKColor(red: 0.44, green: 0.49, blue: 0.67, alpha: 1.0)),
+                LearningItem(icon: "❄️", englishName: "snowy", chineseName: "下雪", color: SKColor(red: 0.83, green: 0.92, blue: 0.98, alpha: 1.0)),
+                LearningItem(icon: "🌈", englishName: "rainbow", chineseName: "彩虹", color: SKColor(red: 0.86, green: 0.68, blue: 0.92, alpha: 1.0)),
+                LearningItem(icon: "💨", englishName: "windy", chineseName: "有风", color: SKColor(red: 0.72, green: 0.84, blue: 0.95, alpha: 1.0)),
+                LearningItem(icon: "🌫️", englishName: "foggy", chineseName: "有雾", color: SKColor(red: 0.76, green: 0.80, blue: 0.85, alpha: 1.0))
+            ]
+        ),
+        LearningCategory(
+            icon: "⚽️",
+            displayName: "运动",
+            englishName: "sports",
+            items: [
+                LearningItem(icon: "⚽️", englishName: "soccer", chineseName: "足球", color: SKColor(red: 0.56, green: 0.80, blue: 0.40, alpha: 1.0)),
+                LearningItem(icon: "🏀", englishName: "basketball", chineseName: "篮球", color: SKColor(red: 0.95, green: 0.57, blue: 0.28, alpha: 1.0)),
+                LearningItem(icon: "🏈", englishName: "football", chineseName: "橄榄球", color: SKColor(red: 0.74, green: 0.48, blue: 0.32, alpha: 1.0)),
+                LearningItem(icon: "⚾️", englishName: "baseball", chineseName: "棒球", color: SKColor(red: 0.92, green: 0.90, blue: 0.86, alpha: 1.0)),
+                LearningItem(icon: "🎾", englishName: "tennis", chineseName: "网球", color: SKColor(red: 0.78, green: 0.86, blue: 0.38, alpha: 1.0)),
+                LearningItem(icon: "🏸", englishName: "badminton", chineseName: "羽毛球", color: SKColor(red: 0.80, green: 0.88, blue: 0.95, alpha: 1.0)),
+                LearningItem(icon: "🏊", englishName: "swimming", chineseName: "游泳", color: SKColor(red: 0.45, green: 0.69, blue: 0.91, alpha: 1.0)),
+                LearningItem(icon: "🏃", englishName: "running", chineseName: "跑步", color: SKColor(red: 0.90, green: 0.62, blue: 0.36, alpha: 1.0))
+            ]
+        )
     ]
     
     override func didMove(to view: SKView) {
@@ -126,7 +332,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             guard let domino = touchedDomino(at: location) else { return }
             selectedDominoNode = domino
             run(SKAction.playSoundFileNamed("click.wav", waitForCompletion: false))
-            presentDominoColorPicker()
+            presentDominoLearningPicker()
         case "ball":
             guard !isAnimating else { return }
             run(SKAction.playSoundFileNamed("click.wav", waitForCompletion: false))
@@ -143,6 +349,10 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             guard landmarkButtonEnabled else { return }
             run(SKAction.playSoundFileNamed("click.wav", waitForCompletion: false))
             presentLandmarkPicker()
+        case "categoryButton":
+            guard categoryButtonEnabled else { return }
+            run(SKAction.playSoundFileNamed("click.wav", waitForCompletion: false))
+            presentLearningCategoryPicker()
         case "resetButton":
             guard resetButtonEnabled else { return }
             run(SKAction.playSoundFileNamed("click.wav", waitForCompletion: false))
@@ -234,10 +444,13 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         
         makeDominos(layout: layout)
         makeTower(layout: layout)
+        updateLearningThemeButtonTitle()
+        updateSubtitleText()
         
         setButtonEnabled(resetButton, enabled: true)
         setButtonEnabled(startButton, enabled: true)
         setButtonEnabled(landmarkButton, enabled: true)
+        setButtonEnabled(categoryButton, enabled: true)
     }
     
     private func resetScene() {
@@ -440,7 +653,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     private func subtitleText(for landmark: TowerNode.Landmark) -> String {
-        "点击“开始模拟”，观看多米诺骨牌击倒\(landmark.displayName)"
+        let category = currentLearningCategory()
+        return "主题：\(category.icon)\(category.displayName)｜点骨牌学单词，开始模拟击倒\(landmark.displayName)"
     }
     
     private func updateSubtitleText() {
@@ -478,16 +692,19 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private func makeDominos(layout: Layout) {
         // Slightly tighter spacing improves chain reliability in a physics simulation.
         let spacing = layout.spacing * 0.95
+        let category = currentLearningCategory()
+        let itemIndices = resolvedDominoLearningItemIndices()
         
         for index in 0..<GameConstants.Geometry.numDominos {
             let x = layout.startX + CGFloat(index) * spacing
             let height = layout.baseDominoHeight + CGFloat(index) * layout.heightIncrement
-            let colorOptionIndex = index % dominoColorOptions.count
-            let color = dominoColorOptions[colorOptionIndex].color
+            let itemIndex = itemIndices[index]
+            let item = category.items[itemIndex]
             
             let domino = DominoNode(
-                color: color,
-                colorOptionIndex: colorOptionIndex,
+                color: item.color,
+                colorOptionIndex: itemIndex,
+                learningIcon: item.icon,
                 xPosition: x,
                 width: layout.dominoWidth,
                 height: height,
@@ -518,10 +735,10 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     
     private func makeButtons() {
         let currentLayout = layout ?? makeLayout(for: size)
-        let spacing: CGFloat = currentLayout.isWide ? 14 : 10
-        let horizontalPadding: CGFloat = currentLayout.isWide ? 48 : 24
-        let preferredWidth: CGFloat = currentLayout.isWide ? 150 : 112
-        let buttonWidth = min(preferredWidth, (size.width - horizontalPadding - 2 * spacing) / 3)
+        let spacing: CGFloat = currentLayout.isWide ? 12 : 8
+        let horizontalPadding: CGFloat = currentLayout.isWide ? 48 : 16
+        let preferredWidth: CGFloat = currentLayout.isWide ? 132 : 88
+        let buttonWidth = min(preferredWidth, (size.width - horizontalPadding - 3 * spacing) / 4)
         
         let start = makeButton(
             name: "startButton",
@@ -539,6 +756,14 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             layout: currentLayout,
             width: buttonWidth
         )
+        let category = makeButton(
+            name: "categoryButton",
+            title: learningThemeButtonTitle(),
+            fillColor: SKColor(red: 0.99, green: 0.62, blue: 0.29, alpha: 1.0),
+            textColor: SKColor.white,
+            layout: currentLayout,
+            width: buttonWidth
+        )
         let reset = makeButton(
             name: "resetButton",
             title: "切换背景",
@@ -548,19 +773,22 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             width: buttonWidth
         )
         
-        let totalWidth = 3 * start.frame.width + 2 * spacing
+        let totalWidth = 4 * start.frame.width + 3 * spacing
         let startX = (size.width - totalWidth) / 2 + start.frame.width / 2
         let y = currentLayout.buttonY
         
         start.position = CGPoint(x: startX, y: y)
         landmark.position = CGPoint(x: startX + start.frame.width + spacing, y: y)
-        reset.position = CGPoint(x: startX + 2 * (start.frame.width + spacing), y: y)
+        category.position = CGPoint(x: startX + 2 * (start.frame.width + spacing), y: y)
+        reset.position = CGPoint(x: startX + 3 * (start.frame.width + spacing), y: y)
         
         addChild(start)
         addChild(landmark)
+        addChild(category)
         addChild(reset)
         startButton = start
         landmarkButton = landmark
+        categoryButton = category
         resetButton = reset
     }
     
@@ -593,7 +821,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         
         let label = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
         label.text = title
-        label.fontSize = 16
+        label.fontSize = layout.isWide ? 15 : 13
         label.fontColor = textColor
         label.verticalAlignmentMode = .center
         label.horizontalAlignmentMode = .center
@@ -605,6 +833,16 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     
     // MARK: - Interactions
     
+    private func learningThemeButtonTitle() -> String {
+        let category = currentLearningCategory()
+        return "\(category.icon)\(category.displayName)"
+    }
+
+    private func updateLearningThemeButtonTitle() {
+        guard let label = categoryButton?.children.compactMap({ $0 as? SKLabelNode }).first else { return }
+        label.text = learningThemeButtonTitle()
+    }
+
     private func setButtonEnabled(_ button: SKShapeNode?, enabled: Bool) {
         guard let button = button else { return }
         button.alpha = enabled ? 1.0 : 0.45
@@ -616,6 +854,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             landmarkButtonEnabled = enabled
         } else if button.name == "resetButton" {
             resetButtonEnabled = enabled
+        } else if button.name == "categoryButton" {
+            categoryButtonEnabled = enabled
         }
     }
     
@@ -661,10 +901,52 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     private func applySelectedLandmark(_ landmark: TowerNode.Landmark) {
+        speakEnglish(landmark.englishName)
         guard selectedLandmark != landmark else { return }
         selectedLandmark = landmark
         updateSubtitleText()
         replaceTower()
+    }
+
+    private func presentLearningCategoryPicker() {
+        guard let presenter = presentingViewController() else { return }
+
+        let alert = UIAlertController(title: "选择学习主题", message: "适合 4 岁儿童的图片词汇", preferredStyle: .actionSheet)
+
+        for (index, category) in learningCategories.enumerated() {
+            let baseTitle = "\(category.icon) \(category.displayName) · \(category.englishName)"
+            let title = index == selectedLearningCategoryIndex ? "\(baseTitle) ✓" : baseTitle
+            let action = UIAlertAction(title: title, style: .default) { [weak self] _ in
+                self?.applySelectedLearningCategory(index: index)
+            }
+            alert.addAction(action)
+        }
+
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+
+        if let popover = alert.popoverPresentationController, let sceneView = view {
+            popover.sourceView = sceneView
+            let anchorPoint = categoryButton?.position ?? CGPoint(x: size.width / 2, y: size.height * 0.1)
+            let anchorInView = convertPoint(toView: anchorPoint)
+            popover.sourceRect = CGRect(x: anchorInView.x, y: anchorInView.y, width: 1, height: 1)
+            popover.permittedArrowDirections = [.up, .down]
+        }
+
+        presenter.present(alert, animated: true)
+    }
+
+    private func applySelectedLearningCategory(index: Int) {
+        guard learningCategories.indices.contains(index) else { return }
+        let category = learningCategories[index]
+        speakEnglish(category.englishName)
+
+        guard selectedLearningCategoryIndex != index else { return }
+
+        selectedLearningCategoryIndex = index
+        selectedDominoLearningItemIndices.removeAll()
+        updateLearningThemeButtonTitle()
+        updateSubtitleText()
+        resetInteractiveElements()
     }
     
     private func replaceTower() {
@@ -699,22 +981,74 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         return nil
     }
     
-    private func presentDominoColorPicker() {
-        guard let targetDomino = selectedDominoNode else { return }
-        presentColorPicker(
-            title: "选择骨牌颜色",
-            message: "仅应用到当前点击的骨牌",
-            currentIndex: targetDomino.colorOptionIndex,
-            anchor: targetDomino.position
-        ) { [weak self] index in
-            self?.applySelectedDominoColor(index: index, to: targetDomino)
+    private func currentLearningCategory() -> LearningCategory {
+        guard !learningCategories.isEmpty else {
+            return LearningCategory(
+                icon: "🎯",
+                displayName: "默认",
+                englishName: "default",
+                items: [LearningItem(icon: "⭐️", englishName: "star", chineseName: "星星", color: SKColor(red: 0.97, green: 0.80, blue: 0.28, alpha: 1.0))]
+            )
         }
+
+        if learningCategories.indices.contains(selectedLearningCategoryIndex) {
+            return learningCategories[selectedLearningCategoryIndex]
+        }
+
+        selectedLearningCategoryIndex = 0
+        return learningCategories[0]
     }
-    
-    private func applySelectedDominoColor(index: Int, to domino: DominoNode) {
-        guard domino.colorOptionIndex != index else { return }
-        guard let option = colorOption(at: index) else { return }
-        domino.updateColor(option.color, colorOptionIndex: index)
+
+    private func learningItem(at index: Int) -> LearningItem? {
+        let category = currentLearningCategory()
+        guard category.items.indices.contains(index) else { return nil }
+        return category.items[index]
+    }
+
+    private func presentDominoLearningPicker() {
+        guard let targetDomino = selectedDominoNode else { return }
+        guard let presenter = presentingViewController() else { return }
+
+        let category = currentLearningCategory()
+        let alert = UIAlertController(
+            title: "选择图片与英语单词",
+            message: "主题：\(category.icon)\(category.displayName)",
+            preferredStyle: .actionSheet
+        )
+
+        for (index, item) in category.items.enumerated() {
+            let baseTitle = "\(item.icon) \(item.englishName) (\(item.chineseName))"
+            let title = index == targetDomino.colorOptionIndex ? "\(baseTitle) ✓" : baseTitle
+            let action = UIAlertAction(title: title, style: .default) { [weak self] _ in
+                self?.applySelectedDominoLearning(index: index, to: targetDomino)
+            }
+            alert.addAction(action)
+        }
+
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+
+        if let popover = alert.popoverPresentationController, let sceneView = view {
+            popover.sourceView = sceneView
+            let anchorInView = convertPoint(toView: targetDomino.position)
+            popover.sourceRect = CGRect(x: anchorInView.x, y: anchorInView.y, width: 1, height: 1)
+            popover.permittedArrowDirections = [.up, .down]
+        }
+
+        presenter.present(alert, animated: true)
+    }
+
+    private func applySelectedDominoLearning(index: Int, to domino: DominoNode) {
+        guard let item = learningItem(at: index) else { return }
+        speakEnglish(item.englishName)
+
+        guard domino.colorOptionIndex != index else {
+            persistDominoLearningSelection(for: domino, itemIndex: index)
+            selectedDominoNode = nil
+            return
+        }
+
+        domino.updateColor(item.color, colorOptionIndex: index, learningIcon: item.icon)
+        persistDominoLearningSelection(for: domino, itemIndex: index)
         selectedDominoNode = nil
     }
 
@@ -731,8 +1065,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func applySelectedBallColor(index: Int) {
-        guard selectedBallColorOptionIndex != index else { return }
         guard let option = colorOption(at: index) else { return }
+        speakEnglish(option.englishName)
+        guard selectedBallColorOptionIndex != index else { return }
         selectedBallColorOptionIndex = index
 
         guard let ballNode = ballNode else { return }
@@ -753,8 +1088,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func applySelectedGuideLineColor(index: Int) {
-        guard selectedGuideLineColorOptionIndex != index else { return }
         guard let option = colorOption(at: index) else { return }
+        speakEnglish(option.englishName)
+        guard selectedGuideLineColorOptionIndex != index else { return }
         selectedGuideLineColorOptionIndex = index
 
         staircaseNode?.updateGuideColor(option.color)
@@ -806,7 +1142,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func currentColorOption(for selectedIndex: inout Int, fallbackColor: SKColor) -> DominoColorOption {
         guard !dominoColorOptions.isEmpty else {
-            return DominoColorOption(name: "default", color: fallbackColor)
+            return DominoColorOption(name: "default", englishName: "default", color: fallbackColor)
         }
 
         guard dominoColorOptions.indices.contains(selectedIndex) else {
@@ -815,6 +1151,49 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
 
         return dominoColorOptions[selectedIndex]
+    }
+
+    private func resolvedDominoLearningItemIndices() -> [Int] {
+        let items = currentLearningCategory().items
+        guard !items.isEmpty else {
+            return Array(repeating: 0, count: GameConstants.Geometry.numDominos)
+        }
+
+        let fallbackIndices = (0..<GameConstants.Geometry.numDominos).map { $0 % items.count }
+
+        guard selectedDominoLearningItemIndices.count == GameConstants.Geometry.numDominos else {
+            selectedDominoLearningItemIndices = fallbackIndices
+            return fallbackIndices
+        }
+
+        for (index, value) in selectedDominoLearningItemIndices.enumerated() where !items.indices.contains(value) {
+            selectedDominoLearningItemIndices[index] = fallbackIndices[index]
+        }
+
+        return selectedDominoLearningItemIndices
+    }
+
+    private func persistDominoLearningSelection(for domino: DominoNode, itemIndex: Int) {
+        guard let dominoIndex = dominos.firstIndex(where: { $0 === domino }) else { return }
+        let currentIndices = resolvedDominoLearningItemIndices()
+        guard currentIndices.indices.contains(dominoIndex) else { return }
+        selectedDominoLearningItemIndices[dominoIndex] = itemIndex
+    }
+
+    private func speakEnglish(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        if speechSynthesizer.isSpeaking {
+            speechSynthesizer.stopSpeaking(at: .immediate)
+        }
+
+        let utterance = AVSpeechUtterance(string: trimmed)
+        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        utterance.rate = 0.46
+        utterance.pitchMultiplier = 1.05
+        utterance.volume = 1.0
+        speechSynthesizer.speak(utterance)
     }
 
     private func ballStrokeColor(for fillColor: SKColor) -> SKColor {
@@ -852,6 +1231,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         // Disable settings while animating
         setButtonEnabled(resetButton, enabled: false)
         setButtonEnabled(landmarkButton, enabled: false)
+        setButtonEnabled(categoryButton, enabled: false)
 
         // Reset domino physics states and ensure they are visible (in case last run exploded them).
         for domino in dominos {
@@ -1438,6 +1818,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         )
         setButtonEnabled(resetButton, enabled: true)
         setButtonEnabled(landmarkButton, enabled: true)
+        setButtonEnabled(categoryButton, enabled: true)
 
         let completeSequence = SKAction.sequence([
             SKAction.run { [weak self] in

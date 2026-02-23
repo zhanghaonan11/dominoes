@@ -10,22 +10,26 @@ import SpriteKit
 final class DominoNode: SKNode {
     private(set) var color: SKColor
     private(set) var colorOptionIndex: Int
+    private(set) var learningIcon: String
     let xPosition: CGFloat
     let height: CGFloat
     let width: CGFloat
     
     private let sprite: SKSpriteNode
+    private let iconLabel: SKLabelNode
 
     // Physics / state
     var hasFallen = false
     var hasPlayedHitSound = false
 
-    init(color: SKColor, colorOptionIndex: Int, xPosition: CGFloat, width: CGFloat, height: CGFloat, texture: SKTexture?) {
+    init(color: SKColor, colorOptionIndex: Int, learningIcon: String, xPosition: CGFloat, width: CGFloat, height: CGFloat, texture: SKTexture?) {
         self.color = color
         self.colorOptionIndex = colorOptionIndex
+        self.learningIcon = learningIcon
         self.xPosition = xPosition
         self.height = height
         self.width = width
+        self.iconLabel = SKLabelNode(fontNamed: "AppleColorEmoji")
         
         // Use a sprite node for rendering performance
         if let tex = texture {
@@ -40,8 +44,16 @@ final class DominoNode: SKNode {
         sprite.anchorPoint = CGPoint(x: 1.0, y: 0) // Anchor at bottom-right equivalent to shape (-width to 0)
         sprite.color = color // Color blend
         sprite.colorBlendFactor = 1.0
+
+        iconLabel.text = learningIcon
+        iconLabel.fontSize = max(8, min(height * 0.24, 18))
+        iconLabel.horizontalAlignmentMode = .center
+        iconLabel.verticalAlignmentMode = .center
+        iconLabel.position = CGPoint(x: -width / 2, y: height * 0.58)
+        iconLabel.zPosition = 2
         
         self.addChild(sprite)
+        sprite.addChild(iconLabel)
     }
     
     required init?(coder aDecoder: NSCoder) {
@@ -90,11 +102,13 @@ final class DominoNode: SKNode {
         return false
     }
 
-    func updateColor(_ newColor: SKColor, colorOptionIndex: Int) {
+    func updateColor(_ newColor: SKColor, colorOptionIndex: Int, learningIcon: String) {
         color = newColor
         self.colorOptionIndex = colorOptionIndex
+        self.learningIcon = learningIcon
         sprite.color = newColor
         sprite.colorBlendFactor = 1.0
+        iconLabel.text = learningIcon
     }
     
     // Class helper to generate a reusable texture for all dominos
