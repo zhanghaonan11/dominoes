@@ -26,36 +26,102 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         let titleY: CGFloat
         let subtitleY: CGFloat
         let buttonY: CGFloat
+        let contentFrame: CGRect
         let isWide: Bool
+        let isUltraWide: Bool
+        let isPad: Bool
+        let isPhone: Bool
+        let isTV: Bool
     }
     
-    private struct DominoColorOption {
-        let name: String
-        let englishName: String
-        let color: SKColor
-    }
-
-    private struct LearningItem {
-        let icon: String
-        let englishName: String
-        let chineseName: String
-        let color: SKColor
-    }
-
-    private struct LearningCategory {
-        let icon: String
-        let displayName: String
-        let englishName: String
-        let items: [LearningItem]
-    }
-
     private struct FirstImpactTelemetry {
         var runID: Int = 0
         var directAssistCount: Int = 0
         var fallbackAssistCount: Int = 0
     }
     
+    private struct UDKeys {
+        static let backgroundIndex = "dominoes.backgroundIndex"
+        static let landmarkIndex = "dominoes.landmarkIndex"
+        static let learningCategoryIndex = "dominoes.learningCategoryIndex"
+        static let ballColorIndex = "dominoes.ballColorIndex"
+        static let guideLineColorIndex = "dominoes.guideLineColorIndex"
+        static let tvFocusSensitivityPreset = "dominoes.tvFocusSensitivityPreset"
+    }
+
+    private enum TVFocusableElement: Equatable {
+        case startButton
+        case landmarkButton
+        case categoryButton
+        case resetButton
+        case tower
+        case ball
+        case guideLine
+        case domino(index: Int)
+    }
+
+    private struct TVFocusableCandidate {
+        let element: TVFocusableElement
+        let center: CGPoint
+        let frame: CGRect
+    }
+
+    private enum TVFocusSensitivityPreset: Int {
+        case steady
+        case responsive
+
+        private struct Config {
+            let displayName: String
+            let initialDelay: TimeInterval
+            let maxInterval: TimeInterval
+            let minInterval: TimeInterval
+            let accelerationDuration: TimeInterval
+        }
+
+        private static let configs: [TVFocusSensitivityPreset: Config] = [
+            .steady: Config(
+                displayName: "稳重",
+                initialDelay: 0.42,
+                maxInterval: 0.24,
+                minInterval: 0.085,
+                accelerationDuration: 2.6
+            ),
+            .responsive: Config(
+                displayName: "灵敏",
+                initialDelay: 0.16,
+                maxInterval: 0.10,
+                minInterval: 0.032,
+                accelerationDuration: 0.75
+            )
+        ]
+
+        private var config: Config {
+            Self.configs[self] ?? Self.configs[.steady]!
+        }
+
+        var displayName: String {
+            config.displayName
+        }
+
+        var initialDelay: TimeInterval {
+            config.initialDelay
+        }
+
+        var maxInterval: TimeInterval {
+            config.maxInterval
+        }
+
+        var minInterval: TimeInterval {
+            config.minInterval
+        }
+
+        var accelerationDuration: TimeInterval {
+            config.accelerationDuration
+        }
+    }
+
     private var layout: Layout?
+    private var lastSafeAreaInsets: UIEdgeInsets = .zero
     private var dominos: [DominoNode] = []
     
     // Core Elements
@@ -87,13 +153,20 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     
     // Reusable Textures
     private var dominoTexture: SKTexture?
-    private var explosionParticleTexture: SKTexture?
+    private var explosionEffect: ExplosionEffect?
+    private var cloudTextures: [SKTexture] = []
     
     // Button interaction state
     private var startButtonEnabled = false
     private var resetButtonEnabled = false
     private var landmarkButtonEnabled = false
     private var categoryButtonEnabled = false
+    private var tvFocusedElement: TVFocusableElement = .startButton
+    private var tvFocusRingNode: SKShapeNode?
+    private var tvFocusSensitivityPreset: TVFocusSensitivityPreset = .steady
+    private let tvFocusHoldTickInterval: TimeInterval = 0.02
+    private let tvFocusRepeatActionKeyPrefix = "tvFocusRepeat."
+    private var tvFocusRepeatStates: [String: TVFocusRepeatState] = [:]
     
     private var selectedLandmark: TowerNode.Landmark = .eiffelTower
     private var selectedDominoNode: DominoNode?
@@ -106,226 +179,132 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "wipo.dominoes", category: "Simulation")
     private let speechSynthesizer = AVSpeechSynthesizer()
     
-    private let dominoColorOptions: [DominoColorOption] = [
-        DominoColorOption(name: "🟥 red", englishName: "red", color: SKColor(red: 0.90, green: 0.18, blue: 0.19, alpha: 1.0)),
-        DominoColorOption(name: "🟧 orange", englishName: "orange", color: SKColor(red: 0.97, green: 0.49, blue: 0.13, alpha: 1.0)),
-        DominoColorOption(name: "🟨 yellow", englishName: "yellow", color: SKColor(red: 0.95, green: 0.78, blue: 0.17, alpha: 1.0)),
-        DominoColorOption(name: "🟩 green", englishName: "green", color: SKColor(red: 0.12, green: 0.72, blue: 0.39, alpha: 1.0)),
-        DominoColorOption(name: "🩵 cyan", englishName: "cyan", color: SKColor(red: 0.08, green: 0.71, blue: 0.68, alpha: 1.0)),
-        DominoColorOption(name: "🟦 blue", englishName: "blue", color: SKColor(red: 0.18, green: 0.55, blue: 0.96, alpha: 1.0)),
-        DominoColorOption(name: "🔷 navy", englishName: "navy", color: SKColor(red: 0.09, green: 0.20, blue: 0.52, alpha: 1.0)),
-        DominoColorOption(name: "🟪 purple", englishName: "purple", color: SKColor(red: 0.57, green: 0.31, blue: 0.89, alpha: 1.0)),
-        DominoColorOption(name: "🩷 pink", englishName: "pink", color: SKColor(red: 0.90, green: 0.23, blue: 0.59, alpha: 1.0)),
-        DominoColorOption(name: "⬛ black", englishName: "black", color: SKColor(red: 0.22, green: 0.24, blue: 0.29, alpha: 1.0))
-    ]
+    private let dominoColorOptions = LearningContent.colorOptions
+    private let learningCategories = LearningContent.categories
 
-    private let learningCategories: [LearningCategory] = [
-        LearningCategory(
-            icon: "🎨",
-            displayName: "颜色",
-            englishName: "colors",
-            items: [
-                LearningItem(icon: "🟥", englishName: "red", chineseName: "红色", color: SKColor(red: 0.90, green: 0.18, blue: 0.19, alpha: 1.0)),
-                LearningItem(icon: "🟧", englishName: "orange", chineseName: "橙色", color: SKColor(red: 0.97, green: 0.49, blue: 0.13, alpha: 1.0)),
-                LearningItem(icon: "🟨", englishName: "yellow", chineseName: "黄色", color: SKColor(red: 0.95, green: 0.78, blue: 0.17, alpha: 1.0)),
-                LearningItem(icon: "🟩", englishName: "green", chineseName: "绿色", color: SKColor(red: 0.12, green: 0.72, blue: 0.39, alpha: 1.0)),
-                LearningItem(icon: "🩵", englishName: "cyan", chineseName: "青色", color: SKColor(red: 0.08, green: 0.71, blue: 0.68, alpha: 1.0)),
-                LearningItem(icon: "🟦", englishName: "blue", chineseName: "蓝色", color: SKColor(red: 0.18, green: 0.55, blue: 0.96, alpha: 1.0)),
-                LearningItem(icon: "🔷", englishName: "navy", chineseName: "藏蓝色", color: SKColor(red: 0.09, green: 0.20, blue: 0.52, alpha: 1.0)),
-                LearningItem(icon: "🟪", englishName: "purple", chineseName: "紫色", color: SKColor(red: 0.57, green: 0.31, blue: 0.89, alpha: 1.0)),
-                LearningItem(icon: "🩷", englishName: "pink", chineseName: "粉色", color: SKColor(red: 0.90, green: 0.23, blue: 0.59, alpha: 1.0)),
-                LearningItem(icon: "⬛", englishName: "black", chineseName: "黑色", color: SKColor(red: 0.22, green: 0.24, blue: 0.29, alpha: 1.0))
-            ]
-        ),
-        LearningCategory(
-            icon: "🚗",
-            displayName: "交通",
-            englishName: "transportation",
-            items: [
-                LearningItem(icon: "🚗", englishName: "car", chineseName: "汽车", color: SKColor(red: 0.97, green: 0.58, blue: 0.44, alpha: 1.0)),
-                LearningItem(icon: "🚌", englishName: "bus", chineseName: "公交车", color: SKColor(red: 0.99, green: 0.75, blue: 0.34, alpha: 1.0)),
-                LearningItem(icon: "🚲", englishName: "bike", chineseName: "自行车", color: SKColor(red: 0.48, green: 0.83, blue: 0.50, alpha: 1.0)),
-                LearningItem(icon: "🚂", englishName: "train", chineseName: "火车", color: SKColor(red: 0.46, green: 0.71, blue: 0.94, alpha: 1.0)),
-                LearningItem(icon: "✈️", englishName: "plane", chineseName: "飞机", color: SKColor(red: 0.67, green: 0.64, blue: 0.93, alpha: 1.0)),
-                LearningItem(icon: "🚢", englishName: "ship", chineseName: "轮船", color: SKColor(red: 0.39, green: 0.77, blue: 0.82, alpha: 1.0)),
-                LearningItem(icon: "🚕", englishName: "taxi", chineseName: "出租车", color: SKColor(red: 0.98, green: 0.86, blue: 0.39, alpha: 1.0)),
-                LearningItem(icon: "🚜", englishName: "tractor", chineseName: "拖拉机", color: SKColor(red: 0.72, green: 0.83, blue: 0.44, alpha: 1.0))
-            ]
-        ),
-        LearningCategory(
-            icon: "🍎",
-            displayName: "水果",
-            englishName: "fruits",
-            items: [
-                LearningItem(icon: "🍎", englishName: "apple", chineseName: "苹果", color: SKColor(red: 0.97, green: 0.47, blue: 0.47, alpha: 1.0)),
-                LearningItem(icon: "🍌", englishName: "banana", chineseName: "香蕉", color: SKColor(red: 0.98, green: 0.87, blue: 0.37, alpha: 1.0)),
-                LearningItem(icon: "🍊", englishName: "orange", chineseName: "橙子", color: SKColor(red: 0.99, green: 0.66, blue: 0.32, alpha: 1.0)),
-                LearningItem(icon: "🍇", englishName: "grape", chineseName: "葡萄", color: SKColor(red: 0.73, green: 0.56, blue: 0.92, alpha: 1.0)),
-                LearningItem(icon: "🍓", englishName: "strawberry", chineseName: "草莓", color: SKColor(red: 0.94, green: 0.38, blue: 0.56, alpha: 1.0)),
-                LearningItem(icon: "🍉", englishName: "watermelon", chineseName: "西瓜", color: SKColor(red: 0.47, green: 0.82, blue: 0.50, alpha: 1.0)),
-                LearningItem(icon: "🍐", englishName: "pear", chineseName: "梨", color: SKColor(red: 0.79, green: 0.86, blue: 0.38, alpha: 1.0)),
-                LearningItem(icon: "🥝", englishName: "kiwi", chineseName: "猕猴桃", color: SKColor(red: 0.54, green: 0.76, blue: 0.39, alpha: 1.0))
-            ]
-        ),
-        LearningCategory(
-            icon: "🐶",
-            displayName: "动物",
-            englishName: "animals",
-            items: [
-                LearningItem(icon: "🐶", englishName: "dog", chineseName: "小狗", color: SKColor(red: 0.96, green: 0.73, blue: 0.50, alpha: 1.0)),
-                LearningItem(icon: "🐱", englishName: "cat", chineseName: "小猫", color: SKColor(red: 0.97, green: 0.66, blue: 0.47, alpha: 1.0)),
-                LearningItem(icon: "🐰", englishName: "rabbit", chineseName: "兔子", color: SKColor(red: 0.98, green: 0.80, blue: 0.87, alpha: 1.0)),
-                LearningItem(icon: "🐻", englishName: "bear", chineseName: "熊", color: SKColor(red: 0.84, green: 0.65, blue: 0.48, alpha: 1.0)),
-                LearningItem(icon: "🦁", englishName: "lion", chineseName: "狮子", color: SKColor(red: 0.98, green: 0.76, blue: 0.41, alpha: 1.0)),
-                LearningItem(icon: "🐼", englishName: "panda", chineseName: "熊猫", color: SKColor(red: 0.77, green: 0.79, blue: 0.82, alpha: 1.0)),
-                LearningItem(icon: "🐢", englishName: "turtle", chineseName: "乌龟", color: SKColor(red: 0.51, green: 0.82, blue: 0.52, alpha: 1.0)),
-                LearningItem(icon: "🐘", englishName: "elephant", chineseName: "大象", color: SKColor(red: 0.68, green: 0.76, blue: 0.88, alpha: 1.0))
-            ]
-        ),
-        LearningCategory(
-            icon: "🌱",
-            displayName: "植物",
-            englishName: "plants",
-            items: [
-                LearningItem(icon: "🌳", englishName: "tree", chineseName: "树", color: SKColor(red: 0.46, green: 0.73, blue: 0.37, alpha: 1.0)),
-                LearningItem(icon: "🌻", englishName: "sunflower", chineseName: "向日葵", color: SKColor(red: 0.98, green: 0.76, blue: 0.30, alpha: 1.0)),
-                LearningItem(icon: "🌹", englishName: "rose", chineseName: "玫瑰", color: SKColor(red: 0.90, green: 0.32, blue: 0.44, alpha: 1.0)),
-                LearningItem(icon: "🌷", englishName: "tulip", chineseName: "郁金香", color: SKColor(red: 0.92, green: 0.57, blue: 0.63, alpha: 1.0)),
-                LearningItem(icon: "🍀", englishName: "clover", chineseName: "三叶草", color: SKColor(red: 0.36, green: 0.76, blue: 0.42, alpha: 1.0)),
-                LearningItem(icon: "🌿", englishName: "leaf", chineseName: "叶子", color: SKColor(red: 0.39, green: 0.80, blue: 0.46, alpha: 1.0)),
-                LearningItem(icon: "🌵", englishName: "cactus", chineseName: "仙人掌", color: SKColor(red: 0.48, green: 0.72, blue: 0.36, alpha: 1.0)),
-                LearningItem(icon: "🍄", englishName: "mushroom", chineseName: "蘑菇", color: SKColor(red: 0.88, green: 0.45, blue: 0.34, alpha: 1.0))
-            ]
-        ),
-        LearningCategory(
-            icon: "🚀",
-            displayName: "太空",
-            englishName: "space",
-            items: [
-                LearningItem(icon: "☀️", englishName: "sun", chineseName: "太阳", color: SKColor(red: 0.98, green: 0.76, blue: 0.30, alpha: 1.0)),
-                LearningItem(icon: "🌙", englishName: "moon", chineseName: "月亮", color: SKColor(red: 0.84, green: 0.83, blue: 0.63, alpha: 1.0)),
-                LearningItem(icon: "⭐️", englishName: "star", chineseName: "星星", color: SKColor(red: 0.99, green: 0.86, blue: 0.42, alpha: 1.0)),
-                LearningItem(icon: "🪐", englishName: "planet", chineseName: "行星", color: SKColor(red: 0.72, green: 0.57, blue: 0.91, alpha: 1.0)),
-                LearningItem(icon: "🌍", englishName: "earth", chineseName: "地球", color: SKColor(red: 0.43, green: 0.73, blue: 0.91, alpha: 1.0)),
-                LearningItem(icon: "☄️", englishName: "comet", chineseName: "彗星", color: SKColor(red: 0.79, green: 0.81, blue: 0.90, alpha: 1.0)),
-                LearningItem(icon: "🛸", englishName: "ufo", chineseName: "飞碟", color: SKColor(red: 0.68, green: 0.79, blue: 0.88, alpha: 1.0)),
-                LearningItem(icon: "🚀", englishName: "rocket", chineseName: "火箭", color: SKColor(red: 0.90, green: 0.40, blue: 0.43, alpha: 1.0))
-            ]
-        ),
-        LearningCategory(
-            icon: "🧍",
-            displayName: "身体",
-            englishName: "body",
-            items: [
-                LearningItem(icon: "👀", englishName: "eyes", chineseName: "眼睛", color: SKColor(red: 0.50, green: 0.73, blue: 0.90, alpha: 1.0)),
-                LearningItem(icon: "👂", englishName: "ears", chineseName: "耳朵", color: SKColor(red: 0.95, green: 0.76, blue: 0.60, alpha: 1.0)),
-                LearningItem(icon: "👃", englishName: "nose", chineseName: "鼻子", color: SKColor(red: 0.93, green: 0.66, blue: 0.58, alpha: 1.0)),
-                LearningItem(icon: "👄", englishName: "mouth", chineseName: "嘴巴", color: SKColor(red: 0.94, green: 0.45, blue: 0.55, alpha: 1.0)),
-                LearningItem(icon: "✋", englishName: "hand", chineseName: "手", color: SKColor(red: 0.98, green: 0.78, blue: 0.56, alpha: 1.0)),
-                LearningItem(icon: "🦶", englishName: "foot", chineseName: "脚", color: SKColor(red: 0.90, green: 0.65, blue: 0.52, alpha: 1.0)),
-                LearningItem(icon: "🦷", englishName: "tooth", chineseName: "牙齿", color: SKColor(red: 0.86, green: 0.88, blue: 0.92, alpha: 1.0)),
-                LearningItem(icon: "❤️", englishName: "heart", chineseName: "心脏", color: SKColor(red: 0.90, green: 0.33, blue: 0.38, alpha: 1.0))
-            ]
-        ),
-        LearningCategory(
-            icon: "👨‍👩‍👧",
-            displayName: "家庭",
-            englishName: "family",
-            items: [
-                LearningItem(icon: "👨", englishName: "father", chineseName: "爸爸", color: SKColor(red: 0.53, green: 0.74, blue: 0.92, alpha: 1.0)),
-                LearningItem(icon: "👩", englishName: "mother", chineseName: "妈妈", color: SKColor(red: 0.96, green: 0.62, blue: 0.70, alpha: 1.0)),
-                LearningItem(icon: "👦", englishName: "boy", chineseName: "男孩", color: SKColor(red: 0.42, green: 0.73, blue: 0.88, alpha: 1.0)),
-                LearningItem(icon: "👧", englishName: "girl", chineseName: "女孩", color: SKColor(red: 0.94, green: 0.64, blue: 0.74, alpha: 1.0)),
-                LearningItem(icon: "👶", englishName: "baby", chineseName: "宝宝", color: SKColor(red: 0.98, green: 0.78, blue: 0.62, alpha: 1.0)),
-                LearningItem(icon: "👴", englishName: "grandpa", chineseName: "爷爷", color: SKColor(red: 0.74, green: 0.80, blue: 0.86, alpha: 1.0)),
-                LearningItem(icon: "👵", englishName: "grandma", chineseName: "奶奶", color: SKColor(red: 0.86, green: 0.76, blue: 0.84, alpha: 1.0)),
-                LearningItem(icon: "🏠", englishName: "home", chineseName: "家", color: SKColor(red: 0.86, green: 0.68, blue: 0.46, alpha: 1.0))
-            ]
-        ),
-        LearningCategory(
-            icon: "🍽️",
-            displayName: "食物",
-            englishName: "food",
-            items: [
-                LearningItem(icon: "🍚", englishName: "rice", chineseName: "米饭", color: SKColor(red: 0.90, green: 0.88, blue: 0.82, alpha: 1.0)),
-                LearningItem(icon: "🍞", englishName: "bread", chineseName: "面包", color: SKColor(red: 0.90, green: 0.68, blue: 0.46, alpha: 1.0)),
-                LearningItem(icon: "🥚", englishName: "egg", chineseName: "鸡蛋", color: SKColor(red: 0.96, green: 0.86, blue: 0.62, alpha: 1.0)),
-                LearningItem(icon: "🥛", englishName: "milk", chineseName: "牛奶", color: SKColor(red: 0.84, green: 0.90, blue: 0.97, alpha: 1.0)),
-                LearningItem(icon: "🧀", englishName: "cheese", chineseName: "奶酪", color: SKColor(red: 0.98, green: 0.82, blue: 0.36, alpha: 1.0)),
-                LearningItem(icon: "🍜", englishName: "noodles", chineseName: "面条", color: SKColor(red: 0.92, green: 0.72, blue: 0.46, alpha: 1.0)),
-                LearningItem(icon: "🍪", englishName: "cookie", chineseName: "饼干", color: SKColor(red: 0.83, green: 0.62, blue: 0.42, alpha: 1.0)),
-                LearningItem(icon: "🍯", englishName: "honey", chineseName: "蜂蜜", color: SKColor(red: 0.95, green: 0.67, blue: 0.28, alpha: 1.0))
-            ]
-        ),
-        LearningCategory(
-            icon: "🔺",
-            displayName: "形状",
-            englishName: "shapes",
-            items: [
-                LearningItem(icon: "⚪️", englishName: "circle", chineseName: "圆形", color: SKColor(red: 0.86, green: 0.88, blue: 0.92, alpha: 1.0)),
-                LearningItem(icon: "⬜️", englishName: "square", chineseName: "正方形", color: SKColor(red: 0.82, green: 0.90, blue: 0.95, alpha: 1.0)),
-                LearningItem(icon: "🔺", englishName: "triangle", chineseName: "三角形", color: SKColor(red: 0.94, green: 0.46, blue: 0.43, alpha: 1.0)),
-                LearningItem(icon: "🔷", englishName: "diamond", chineseName: "菱形", color: SKColor(red: 0.45, green: 0.68, blue: 0.93, alpha: 1.0)),
-                LearningItem(icon: "🟧", englishName: "rectangle", chineseName: "长方形", color: SKColor(red: 0.95, green: 0.62, blue: 0.33, alpha: 1.0)),
-                LearningItem(icon: "⭐️", englishName: "star", chineseName: "星形", color: SKColor(red: 0.98, green: 0.82, blue: 0.36, alpha: 1.0)),
-                LearningItem(icon: "❤️", englishName: "heart", chineseName: "心形", color: SKColor(red: 0.90, green: 0.35, blue: 0.45, alpha: 1.0)),
-                LearningItem(icon: "🌙", englishName: "crescent", chineseName: "月牙形", color: SKColor(red: 0.84, green: 0.84, blue: 0.66, alpha: 1.0))
-            ]
-        ),
-        LearningCategory(
-            icon: "☀️",
-            displayName: "天气",
-            englishName: "weather",
-            items: [
-                LearningItem(icon: "☀️", englishName: "sunny", chineseName: "晴天", color: SKColor(red: 0.98, green: 0.78, blue: 0.31, alpha: 1.0)),
-                LearningItem(icon: "☁️", englishName: "cloudy", chineseName: "多云", color: SKColor(red: 0.72, green: 0.80, blue: 0.88, alpha: 1.0)),
-                LearningItem(icon: "🌧️", englishName: "rainy", chineseName: "下雨", color: SKColor(red: 0.43, green: 0.62, blue: 0.86, alpha: 1.0)),
-                LearningItem(icon: "⛈️", englishName: "stormy", chineseName: "雷雨", color: SKColor(red: 0.44, green: 0.49, blue: 0.67, alpha: 1.0)),
-                LearningItem(icon: "❄️", englishName: "snowy", chineseName: "下雪", color: SKColor(red: 0.83, green: 0.92, blue: 0.98, alpha: 1.0)),
-                LearningItem(icon: "🌈", englishName: "rainbow", chineseName: "彩虹", color: SKColor(red: 0.86, green: 0.68, blue: 0.92, alpha: 1.0)),
-                LearningItem(icon: "💨", englishName: "windy", chineseName: "有风", color: SKColor(red: 0.72, green: 0.84, blue: 0.95, alpha: 1.0)),
-                LearningItem(icon: "🌫️", englishName: "foggy", chineseName: "有雾", color: SKColor(red: 0.76, green: 0.80, blue: 0.85, alpha: 1.0))
-            ]
-        ),
-        LearningCategory(
-            icon: "⚽️",
-            displayName: "运动",
-            englishName: "sports",
-            items: [
-                LearningItem(icon: "⚽️", englishName: "soccer", chineseName: "足球", color: SKColor(red: 0.56, green: 0.80, blue: 0.40, alpha: 1.0)),
-                LearningItem(icon: "🏀", englishName: "basketball", chineseName: "篮球", color: SKColor(red: 0.95, green: 0.57, blue: 0.28, alpha: 1.0)),
-                LearningItem(icon: "🏈", englishName: "football", chineseName: "橄榄球", color: SKColor(red: 0.74, green: 0.48, blue: 0.32, alpha: 1.0)),
-                LearningItem(icon: "⚾️", englishName: "baseball", chineseName: "棒球", color: SKColor(red: 0.92, green: 0.90, blue: 0.86, alpha: 1.0)),
-                LearningItem(icon: "🎾", englishName: "tennis", chineseName: "网球", color: SKColor(red: 0.78, green: 0.86, blue: 0.38, alpha: 1.0)),
-                LearningItem(icon: "🏸", englishName: "badminton", chineseName: "羽毛球", color: SKColor(red: 0.80, green: 0.88, blue: 0.95, alpha: 1.0)),
-                LearningItem(icon: "🏊", englishName: "swimming", chineseName: "游泳", color: SKColor(red: 0.45, green: 0.69, blue: 0.91, alpha: 1.0)),
-                LearningItem(icon: "🏃", englishName: "running", chineseName: "跑步", color: SKColor(red: 0.90, green: 0.62, blue: 0.36, alpha: 1.0))
-            ]
-        )
-    ]
-    
+    private struct TVFocusRepeatState {
+        var heldDuration: TimeInterval = 0
+        var elapsedSinceLastMove: TimeInterval = 0
+    }
+
+
     override func didMove(to view: SKView) {
         backgroundColor = .white
         physicsWorld.gravity = GameConstants.Physics.gravity
         physicsWorld.contactDelegate = self
+        explosionEffect = ExplosionEffect(scene: self)
+        lastSafeAreaInsets = currentSafeAreaInsets()
+        loadUserDefaults()
         buildStaticSceneOnce()
         resetInteractiveElements()
     }
-    
+
+    private func loadUserDefaults() {
+        let ud = UserDefaults.standard
+        let bgIdx = ud.integer(forKey: UDKeys.backgroundIndex)
+        if bgIdx < GameConstants.Colors.backgroundGradients.count {
+            currentBackgroundIndex = bgIdx
+        }
+        let lmIdx = ud.integer(forKey: UDKeys.landmarkIndex)
+        let landmarks = TowerNode.Landmark.allCases
+        if landmarks.indices.contains(lmIdx) {
+            selectedLandmark = landmarks[lmIdx]
+        }
+        let catIdx = ud.integer(forKey: UDKeys.learningCategoryIndex)
+        if learningCategories.indices.contains(catIdx) {
+            selectedLearningCategoryIndex = catIdx
+        }
+        let ballIdx = ud.integer(forKey: UDKeys.ballColorIndex)
+        if dominoColorOptions.indices.contains(ballIdx) {
+            selectedBallColorOptionIndex = ballIdx
+        }
+        let guideIdx = ud.integer(forKey: UDKeys.guideLineColorIndex)
+        if dominoColorOptions.indices.contains(guideIdx) {
+            selectedGuideLineColorOptionIndex = guideIdx
+        }
+        if let preset = TVFocusSensitivityPreset(rawValue: ud.integer(forKey: UDKeys.tvFocusSensitivityPreset)) {
+            tvFocusSensitivityPreset = preset
+        }
+    }
+
     override func didChangeSize(_ oldSize: CGSize) {
         guard view != nil else { return }
-        // For simplicity, we just rebuild if the size changes (e.g., orientation change)
-        isInitialized = false
-        removeAllChildren()
-        buildStaticSceneOnce()
-        resetInteractiveElements()
+        let insets = currentSafeAreaInsets()
+        guard oldSize != size || insets != lastSafeAreaInsets else { return }
+        lastSafeAreaInsets = insets
+        rebuildSceneForLayoutChange()
+    }
+
+    func refreshLayoutForSafeAreaIfNeeded() {
+        let insets = currentSafeAreaInsets()
+        guard insets != lastSafeAreaInsets else { return }
+        lastSafeAreaInsets = insets
+        rebuildSceneForLayoutChange()
     }
     
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let touch = touches.first else { return }
         let location = touch.location(in: self)
         guard let targetName = buttonName(at: location) else { return }
-        
+
+        handleInteraction(targetName: targetName, at: location)
+    }
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+#if os(tvOS)
+        var handled = false
+        for press in presses {
+            if tvFocusDirection(for: press.type) != nil {
+                startTVDirectionalFocusRepeat(for: press.type)
+                handled = true
+                continue
+            }
+
+            if handleTVPress(press.type) {
+                handled = true
+            }
+        }
+
+        if handled {
+            return
+        }
+#endif
+        super.pressesBegan(presses, with: event)
+    }
+
+    override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+#if os(tvOS)
+        var handled = false
+        for press in presses {
+            if stopTVDirectionalFocusRepeat(for: press.type) {
+                handled = true
+            }
+        }
+
+        if handled {
+            return
+        }
+#endif
+        super.pressesEnded(presses, with: event)
+    }
+
+    override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+#if os(tvOS)
+        var handled = false
+        for press in presses {
+            if stopTVDirectionalFocusRepeat(for: press.type) {
+                handled = true
+            }
+        }
+
+        if handled {
+            return
+        }
+#endif
+        super.pressesCancelled(presses, with: event)
+    }
+
+    private func handleInteraction(targetName: String, at location: CGPoint) {
         switch targetName {
         case "dominoTarget":
             guard !isAnimating else { return }
@@ -355,10 +334,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             presentLearningCategoryPicker()
         case "resetButton":
             guard resetButtonEnabled else { return }
-            run(SKAction.playSoundFileNamed("click.wav", waitForCompletion: false))
-            currentBackgroundIndex = (currentBackgroundIndex + 1) % GameConstants.Colors.backgroundGradients.count
-            updateBackground()
-            resetInteractiveElements()
+            cycleBackgroundAndReset()
         default:
             break
         }
@@ -383,15 +359,35 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         
         makeButtons()
         makeCountdownLabel()
+#if os(tvOS)
+        ensureTVFocusRingNode()
+#endif
         
         // Prepare reusable textures
         if let layout = layout {
             dominoTexture = DominoNode.createBaseTexture(width: layout.dominoWidth, height: layout.baseDominoHeight + CGFloat(GameConstants.Geometry.numDominos) * layout.heightIncrement)
         }
     }
+
+    private func rebuildSceneForLayoutChange() {
+        isInitialized = false
+#if os(tvOS)
+        tvFocusRingNode = nil
+#endif
+        removeAllChildren()
+        buildStaticSceneOnce()
+        resetInteractiveElements()
+    }
+
+    private func currentSafeAreaInsets() -> UIEdgeInsets {
+        view?.safeAreaInsets ?? .zero
+    }
     
     private func resetInteractiveElements() {
         guard let layout = layout else { return }
+#if os(tvOS)
+        stopAllTVDirectionalFocusRepeats()
+#endif
         
         // Clean up previous dynamic elements
         dominos.forEach { $0.removeFromParent() }
@@ -399,7 +395,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         ballNode?.removeFromParent()
         towerNode?.removeFromParent()
         staircaseNode?.removeFromParent()
-        
+        // Keep staircaseNode reference for potential reuse (don't nil it here)
+
         // Remove active emitters if any
         enumerateChildNodes(withName: "explosionEmitter") { node, _ in
             node.removeFromParent()
@@ -425,12 +422,18 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         ballNode = ball
         addChild(ball)
         
+        let staircaseMinimumX = layout.contentFrame.minX + layout.ballRadius + (layout.isPhone ? 18 : 8)
+        let staircaseCurveFactor: CGFloat = layout.isPhone ? 1.2 : 1.0
+        let staircaseBendDirection: CGFloat = layout.isPhone ? -1.0 : 1.0
         let staircase = StaircaseNode.build(
             startX: layout.startX,
             groundY: layout.groundY,
             height: layout.baseDominoHeight * 4,
             ballRadius: layout.ballRadius,
-            guideColor: currentGuideLineColorOption().color
+            guideColor: currentGuideLineColorOption().color,
+            minimumX: staircaseMinimumX,
+            curveFactor: staircaseCurveFactor,
+            bendDirection: staircaseBendDirection
         )
         staircaseNode = staircase
         addChild(staircase)
@@ -451,6 +454,10 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         setButtonEnabled(startButton, enabled: true)
         setButtonEnabled(landmarkButton, enabled: true)
         setButtonEnabled(categoryButton, enabled: true)
+#if os(tvOS)
+        ensureTVFocusedElementIsValid()
+        updateTVFocusAppearance()
+#endif
     }
     
     private func resetScene() {
@@ -461,27 +468,73 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private func makeLayout(for size: CGSize) -> Layout {
         let sceneWidth = size.width
         let sceneHeight = size.height
-        let isWide = sceneWidth > sceneHeight * 1.2
+        let idiom = view?.traitCollection.userInterfaceIdiom ?? UIDevice.current.userInterfaceIdiom
+        let isPad = idiom == .pad
+        let isPhone = idiom == .phone
+        let isTV = idiom == .tv
+        let safeInsets = currentSafeAreaInsets()
+        let horizontalMargin = clamp(sceneWidth * 0.02, min: 8, max: 24)
+        let verticalMargin = clamp(sceneHeight * 0.02, min: 6, max: 18)
+        let contentFrame = CGRect(
+            x: safeInsets.left + horizontalMargin,
+            y: safeInsets.bottom + verticalMargin,
+            width: max(1, sceneWidth - safeInsets.left - safeInsets.right - horizontalMargin * 2),
+            height: max(1, sceneHeight - safeInsets.top - safeInsets.bottom - verticalMargin * 2)
+        )
+        let aspect = contentFrame.width / max(contentFrame.height, 1)
+        let isWide = aspect > 1.25
+        let isUltraWide = aspect > 1.9
         
-        let groundY = sceneHeight * (isWide ? 0.16 : 0.18)
-        let startX = sceneWidth * (isWide ? 0.08 : 0.12)
+        let groundRatio: CGFloat = isTV ? 0.15 : (isPad ? 0.15 : (isUltraWide ? 0.13 : (isWide ? 0.16 : 0.18)))
+        let startRatio: CGFloat = isTV ? 0.10 : (isPad ? 0.09 : (isUltraWide ? 0.08 : (isWide ? 0.10 : 0.12)))
+        let chainWidthRatio: CGFloat = isTV ? 0.62 : (isPad ? 0.62 : (isUltraWide ? 0.68 : (isWide ? 0.63 : 0.61)))
+        let dominoWidthScale: CGFloat = isTV ? 0.0135 : (isPad ? 0.0185 : (isUltraWide ? 0.016 : 0.017))
+        let baseDominoHeightScale: CGFloat = isTV ? 0.11 : (isPad ? 0.125 : (isUltraWide ? 0.10 : 0.11))
+        let heightIncrementScale: CGFloat = isTV ? 0.0090 : (isPad ? 0.0125 : (isUltraWide ? 0.013 : 0.015))
+        let towerWidthScale: CGFloat = isTV ? 0.10 : (isPad ? 0.12 : (isUltraWide ? 0.10 : 0.11))
+        let towerGapRatio: CGFloat = isTV ? 0.035 : (isPad ? 0.045 : (isUltraWide ? 0.04 : 0.06))
+        let ballTopInset: CGFloat = isTV ? 100 : (isPad ? 56 : (isUltraWide ? 40 : 48))
+        let titleTopInset: CGFloat = isTV ? 54 : (isPad ? 36 : (isUltraWide ? 24 : 32))
+        let subtitleGap: CGFloat = isTV ? 36 : (isPad ? 30 : (isUltraWide ? 24 : 26))
+        let buttonHeightRatio: CGFloat = isTV ? 0.12 : (isPad ? 0.09 : (isUltraWide ? 0.11 : 0.10))
+
+        let groundY = contentFrame.minY + contentFrame.height * groundRatio
+        let startX = contentFrame.minX + contentFrame.width * startRatio
         
-        let chainWidth = sceneWidth * (isWide ? 0.64 : 0.62)
+        let chainWidth = contentFrame.width * chainWidthRatio
         let spacing = chainWidth / CGFloat(GameConstants.Geometry.numDominos - 1)
-        let dominoWidth = clamp(sceneWidth * 0.016, min: 10, max: 18)
-        let baseDominoHeight = sceneHeight * 0.10
-        let heightIncrement = sceneHeight * 0.015
+        let dominoWidth = clamp(
+            contentFrame.width * dominoWidthScale,
+            min: isTV ? 14 : (isPad ? 14 : 10),
+            max: isTV ? 30 : (isPad ? 24 : 18)
+        )
+        let baseDominoHeight = clamp(
+            contentFrame.height * baseDominoHeightScale,
+            min: isTV ? 68 : (isPad ? 62 : 34),
+            max: isTV ? 160 : (isPad ? 120 : 84)
+        )
+        let heightIncrement = clamp(
+            contentFrame.height * heightIncrementScale,
+            min: isTV ? 5 : (isPad ? 8 : 4),
+            max: isTV ? 12 : (isPad ? 16 : 11)
+        )
         
-        let towerX = startX + chainWidth + sceneWidth * (isWide ? 0.06 : 0.08)
-        let towerWidth = sceneWidth * (isWide ? 0.10 : 0.12)
+        let towerWidth = clamp(
+            contentFrame.width * towerWidthScale,
+            min: isTV ? 110 : (isPad ? 100 : 68),
+            max: isTV ? 220 : (isPad ? 220 : 150)
+        )
+        let towerGap = contentFrame.width * towerGapRatio
+        let maxTowerX = contentFrame.maxX - towerWidth
+        let towerX = min(startX + chainWidth + towerGap, maxTowerX)
         
         let ballRadius = dominoWidth * 1.1
-        let ballStartX = sceneWidth * (isWide ? 0.03 : 0.04)
-        let ballStartY = sceneHeight * (isWide ? 0.90 : 0.88)
+        let ballStartX = max(contentFrame.minX + ballRadius + 8, startX - contentFrame.width * 0.06)
+        let ballStartY = contentFrame.maxY - ballTopInset
         
-        let titleY = sceneHeight - (isWide ? 42 : 60)
-        let subtitleY = sceneHeight - (isWide ? 66 : 88)
-        let buttonY = sceneHeight * (isWide ? 0.12 : 0.08)
+        let titleY = contentFrame.maxY - titleTopInset
+        let subtitleY = titleY - subtitleGap
+        let buttonY = contentFrame.minY + contentFrame.height * buttonHeightRatio
         
         return Layout(
             groundY: groundY,
@@ -498,7 +551,12 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             titleY: titleY,
             subtitleY: subtitleY,
             buttonY: buttonY,
-            isWide: isWide
+            contentFrame: contentFrame,
+            isWide: isWide,
+            isUltraWide: isUltraWide,
+            isPad: isPad,
+            isPhone: isPhone,
+            isTV: isTV
         )
     }
     
@@ -554,31 +612,60 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         run(SKAction.repeatForever(seq), withKey: "spawnClouds")
     }
     
+    private func ensureCloudTextures() {
+        guard cloudTextures.isEmpty else { return }
+        let view = SKView()
+        // Pre-render 4 discrete cloud sizes to cover the 120-200 range
+        let widths: [CGFloat] = [120, 150, 175, 200]
+        for w in widths {
+            let h = w * 0.35
+            let padding: CGFloat = h * 0.6 // extra space for puffs
+            let texW = w + padding * 2
+            let texH = h + padding
+
+            let container = SKNode()
+
+            let body = SKShapeNode(rectOf: CGSize(width: w, height: h), cornerRadius: h / 2)
+            body.fillColor = .white
+            body.strokeColor = .clear
+            body.position = CGPoint(x: texW / 2, y: h / 2 + 2)
+            container.addChild(body)
+
+            let puff1 = SKShapeNode(circleOfRadius: h * 0.6)
+            puff1.fillColor = .white
+            puff1.strokeColor = .clear
+            puff1.position = CGPoint(x: texW / 2 - w * 0.15, y: h * 0.3 + h / 2 + 2)
+            container.addChild(puff1)
+
+            let puff2 = SKShapeNode(circleOfRadius: h * 0.5)
+            puff2.fillColor = .white
+            puff2.strokeColor = .clear
+            puff2.position = CGPoint(x: texW / 2 + w * 0.2, y: h * 0.2 + h / 2 + 2)
+            container.addChild(puff2)
+
+            if let texture = view.texture(from: container, crop: CGRect(x: 0, y: 0, width: texW, height: texH)) {
+                texture.filteringMode = .linear
+                cloudTextures.append(texture)
+            }
+        }
+    }
+
     private func spawnCloud(fromRight: Bool) {
-        let cloudWidth = CGFloat.random(in: 120...200)
-        let cloudHeight = cloudWidth * 0.35
-        let cloud = SKShapeNode(rectOf: CGSize(width: cloudWidth, height: cloudHeight), cornerRadius: cloudHeight / 2)
+        ensureCloudTextures()
+        guard !cloudTextures.isEmpty else { return }
+
+        let texIndex = Int.random(in: 0..<cloudTextures.count)
+        let texture = cloudTextures[texIndex]
+        let cloudWidth: CGFloat = [120, 150, 175, 200][texIndex]
+
+        let cloud = SKSpriteNode(texture: texture)
         cloud.name = "cloudNode"
-        cloud.fillColor = SKColor(white: 1.0, alpha: CGFloat.random(in: 0.6...0.9))
-        cloud.strokeColor = .clear
+        cloud.alpha = CGFloat.random(in: 0.6...0.9)
         cloud.zPosition = -15
-        
-        // 分别在云的上方添加大小不一的凸起结构，使其更像云朵
-        let puff1 = SKShapeNode(circleOfRadius: cloudHeight * 0.6)
-        puff1.fillColor = cloud.fillColor
-        puff1.strokeColor = .clear
-        puff1.position = CGPoint(x: -cloudWidth * 0.15, y: cloudHeight * 0.3)
-        cloud.addChild(puff1)
-        
-        let puff2 = SKShapeNode(circleOfRadius: cloudHeight * 0.5)
-        puff2.fillColor = cloud.fillColor
-        puff2.strokeColor = .clear
-        puff2.position = CGPoint(x: cloudWidth * 0.2, y: cloudHeight * 0.2)
-        cloud.addChild(puff2)
-        
+
         let scale = CGFloat.random(in: 0.5...1.2)
         cloud.setScale(scale)
-        
+
         let py = size.height * CGFloat.random(in: 0.50...0.85)
         let px: CGFloat
         if fromRight {
@@ -588,7 +675,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
         cloud.position = CGPoint(x: px, y: py)
         addChild(cloud)
-        
+
         // 让远处的云（较小）移动得更慢，形成视差效果
         let duration = TimeInterval(CGFloat.random(in: 30.0...50.0) / scale)
         let endX = -cloudWidth * scale - 50
@@ -634,9 +721,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         let currentLayout = layout ?? makeLayout(for: size)
         let label = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
         label.text = "多米诺骨牌效应"
-        label.fontSize = 28
+        label.fontSize = currentLayout.isTV ? 42 : 28
         label.fontColor = GameConstants.Colors.textTitle
-        label.position = CGPoint(x: size.width / 2, y: currentLayout.titleY)
+        label.position = CGPoint(x: currentLayout.contentFrame.midX, y: currentLayout.titleY)
         label.zPosition = 5
         return label
     }
@@ -645,15 +732,18 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         let currentLayout = layout ?? makeLayout(for: size)
         let label = SKLabelNode(fontNamed: "AvenirNext-Regular")
         label.text = subtitleText(for: selectedLandmark)
-        label.fontSize = 14
+        label.fontSize = currentLayout.isTV ? 24 : 14
         label.fontColor = GameConstants.Colors.textSubtitle
-        label.position = CGPoint(x: size.width / 2, y: currentLayout.subtitleY)
+        label.position = CGPoint(x: currentLayout.contentFrame.midX, y: currentLayout.subtitleY)
         label.zPosition = 5
         return label
     }
     
     private func subtitleText(for landmark: TowerNode.Landmark) -> String {
         let category = currentLearningCategory()
+        if layout?.isTV == true {
+            return "主题：\(category.icon)\(category.displayName)｜方向键移动焦点，按触控板确认，播放键切换手感：\(tvFocusSensitivityPreset.displayName)"
+        }
         return "主题：\(category.icon)\(category.displayName)｜点骨牌学单词，开始模拟击倒\(landmark.displayName)"
     }
     
@@ -690,8 +780,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     private func makeDominos(layout: Layout) {
-        // Slightly tighter spacing improves chain reliability in a physics simulation.
-        let spacing = layout.spacing * 0.95
+        // Tighter spacing improves chain reliability across iPhone/iPad aspect ratios.
+        let spacing = layout.spacing * (layout.isPad ? 0.88 : 0.90)
         let category = currentLearningCategory()
         let itemIndices = resolvedDominoLearningItemIndices()
         
@@ -735,10 +825,27 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     
     private func makeButtons() {
         let currentLayout = layout ?? makeLayout(for: size)
-        let spacing: CGFloat = currentLayout.isWide ? 12 : 8
-        let horizontalPadding: CGFloat = currentLayout.isWide ? 48 : 16
-        let preferredWidth: CGFloat = currentLayout.isWide ? 132 : 88
-        let buttonWidth = min(preferredWidth, (size.width - horizontalPadding - 3 * spacing) / 4)
+        let spacing: CGFloat
+        let horizontalPadding: CGFloat
+        let preferredWidth: CGFloat
+        if currentLayout.isTV {
+            spacing = 30
+            horizontalPadding = 160
+            preferredWidth = 250
+        } else if currentLayout.isPad {
+            spacing = 16
+            horizontalPadding = 56
+            preferredWidth = 168
+        } else if currentLayout.isPhone && currentLayout.isUltraWide {
+            spacing = 12
+            horizontalPadding = 32
+            preferredWidth = 150
+        } else {
+            spacing = currentLayout.isWide ? 12 : 8
+            horizontalPadding = currentLayout.isWide ? 40 : 16
+            preferredWidth = currentLayout.isWide ? 148 : 88
+        }
+        let buttonWidth = min(preferredWidth, (currentLayout.contentFrame.width - horizontalPadding - 3 * spacing) / 4)
         
         let start = makeButton(
             name: "startButton",
@@ -774,7 +881,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         )
         
         let totalWidth = 4 * start.frame.width + 3 * spacing
-        let startX = (size.width - totalWidth) / 2 + start.frame.width / 2
+        let startX = currentLayout.contentFrame.minX + (currentLayout.contentFrame.width - totalWidth) / 2 + start.frame.width / 2
         let y = currentLayout.buttonY
         
         start.position = CGPoint(x: startX, y: y)
@@ -793,11 +900,12 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     private func makeCountdownLabel() {
+        let currentLayout = layout ?? makeLayout(for: size)
         let label = SKLabelNode(fontNamed: "AvenirNext-Medium")
         label.text = ""
-        label.fontSize = 42
+        label.fontSize = currentLayout.isTV ? 72 : 42
         label.fontColor = SKColor(white: 0.25, alpha: 1.0)
-        label.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        label.position = CGPoint(x: currentLayout.contentFrame.midX, y: currentLayout.contentFrame.midY)
         label.zPosition = 20
         label.isHidden = true
         addChild(label)
@@ -805,7 +913,23 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     private func makeButton(name: String, title: String, fillColor: SKColor, textColor: SKColor, layout: Layout, width: CGFloat) -> SKShapeNode {
-        let size = CGSize(width: width, height: layout.isWide ? 52 : 44)
+        let buttonHeight: CGFloat
+        let labelFontSize: CGFloat
+        if layout.isTV {
+            buttonHeight = 78
+            labelFontSize = 24
+        } else if layout.isPad {
+            buttonHeight = 58
+            labelFontSize = 17
+        } else if layout.isPhone && layout.isUltraWide {
+            buttonHeight = 56
+            labelFontSize = 16
+        } else {
+            buttonHeight = layout.isWide ? 54 : 44
+            labelFontSize = layout.isWide ? 16 : 13
+        }
+
+        let size = CGSize(width: width, height: buttonHeight)
         let button = SKShapeNode(rectOf: size, cornerRadius: 12)
         button.name = name
         button.fillColor = fillColor
@@ -821,7 +945,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         
         let label = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
         label.text = title
-        label.fontSize = layout.isWide ? 15 : 13
+        label.fontSize = labelFontSize
         label.fontColor = textColor
         label.verticalAlignmentMode = .center
         label.horizontalAlignmentMode = .center
@@ -857,7 +981,405 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         } else if button.name == "categoryButton" {
             categoryButtonEnabled = enabled
         }
+
+#if os(tvOS)
+        ensureTVFocusedElementIsValid()
+        updateTVFocusAppearance()
+#endif
     }
+
+    private func cycleBackgroundAndReset() {
+        run(SKAction.playSoundFileNamed("click.wav", waitForCompletion: false))
+        currentBackgroundIndex = (currentBackgroundIndex + 1) % GameConstants.Colors.backgroundGradients.count
+        UserDefaults.standard.set(currentBackgroundIndex, forKey: UDKeys.backgroundIndex)
+        updateBackground()
+        resetInteractiveElements()
+    }
+
+#if os(tvOS)
+    private func tvFocusDirection(for pressType: UIPress.PressType) -> CGVector? {
+        switch pressType {
+        case .leftArrow:
+            return CGVector(dx: -1, dy: 0)
+        case .rightArrow:
+            return CGVector(dx: 1, dy: 0)
+        case .upArrow:
+            return CGVector(dx: 0, dy: 1)
+        case .downArrow:
+            return CGVector(dx: 0, dy: -1)
+        default:
+            return nil
+        }
+    }
+
+    private func tvRepeatActionKey(for pressType: UIPress.PressType) -> String? {
+        switch pressType {
+        case .leftArrow:
+            return "\(tvFocusRepeatActionKeyPrefix)left"
+        case .rightArrow:
+            return "\(tvFocusRepeatActionKeyPrefix)right"
+        case .upArrow:
+            return "\(tvFocusRepeatActionKeyPrefix)up"
+        case .downArrow:
+            return "\(tvFocusRepeatActionKeyPrefix)down"
+        default:
+            return nil
+        }
+    }
+
+    private func startTVDirectionalFocusRepeat(for pressType: UIPress.PressType) {
+        guard let direction = tvFocusDirection(for: pressType) else { return }
+        guard let actionKey = tvRepeatActionKey(for: pressType) else { return }
+        guard action(forKey: actionKey) == nil else { return }
+
+        moveTVFocus(direction: direction)
+        tvFocusRepeatStates[actionKey] = TVFocusRepeatState()
+
+        let tickAction = SKAction.sequence([
+            SKAction.wait(forDuration: tvFocusHoldTickInterval),
+            SKAction.run { [weak self] in
+                self?.handleTVDirectionalFocusTick(actionKey: actionKey, direction: direction)
+            },
+        ])
+        let action = SKAction.sequence([
+            SKAction.wait(forDuration: tvFocusSensitivityPreset.initialDelay),
+            SKAction.repeatForever(tickAction)
+        ])
+        run(action, withKey: actionKey)
+    }
+
+    private func handleTVDirectionalFocusTick(actionKey: String, direction: CGVector) {
+        guard var state = tvFocusRepeatStates[actionKey] else { return }
+
+        state.heldDuration += tvFocusHoldTickInterval
+        state.elapsedSinceLastMove += tvFocusHoldTickInterval
+
+        let requiredInterval = tvFocusInterval(forHeldDuration: state.heldDuration)
+        if state.elapsedSinceLastMove + 0.0001 >= requiredInterval {
+            moveTVFocus(direction: direction)
+            state.elapsedSinceLastMove = max(0, state.elapsedSinceLastMove - requiredInterval)
+        }
+
+        tvFocusRepeatStates[actionKey] = state
+    }
+
+    private func tvFocusInterval(forHeldDuration heldDuration: TimeInterval) -> TimeInterval {
+        let normalized = min(max(heldDuration / tvFocusSensitivityPreset.accelerationDuration, 0), 1)
+        let eased = 1 - pow(1 - normalized, 2)
+        return tvFocusSensitivityPreset.maxInterval
+            - (tvFocusSensitivityPreset.maxInterval - tvFocusSensitivityPreset.minInterval) * eased
+    }
+
+    @discardableResult
+    private func stopTVDirectionalFocusRepeat(for pressType: UIPress.PressType) -> Bool {
+        guard let actionKey = tvRepeatActionKey(for: pressType) else { return false }
+        guard action(forKey: actionKey) != nil else { return false }
+        removeAction(forKey: actionKey)
+        tvFocusRepeatStates[actionKey] = nil
+        return true
+    }
+
+    private func stopAllTVDirectionalFocusRepeats() {
+        let allDirections: [UIPress.PressType] = [.leftArrow, .rightArrow, .upArrow, .downArrow]
+        allDirections.forEach { _ = stopTVDirectionalFocusRepeat(for: $0) }
+    }
+
+    private func toggleTVFocusSensitivityPreset() {
+        switch tvFocusSensitivityPreset {
+        case .steady:
+            tvFocusSensitivityPreset = .responsive
+        case .responsive:
+            tvFocusSensitivityPreset = .steady
+        }
+        UserDefaults.standard.set(tvFocusSensitivityPreset.rawValue, forKey: UDKeys.tvFocusSensitivityPreset)
+        updateSubtitleText()
+    }
+
+    private func handleTVPress(_ pressType: UIPress.PressType) -> Bool {
+        switch pressType {
+        case .select:
+            stopAllTVDirectionalFocusRepeats()
+            activateTVFocusedElement()
+            return true
+        case .playPause:
+            stopAllTVDirectionalFocusRepeats()
+            toggleTVFocusSensitivityPreset()
+            run(SKAction.playSoundFileNamed("click.wav", waitForCompletion: false))
+            return true
+        case .menu:
+            stopAllTVDirectionalFocusRepeats()
+            return false
+        default:
+            return false
+        }
+    }
+
+    private func ensureTVFocusRingNode() {
+        if tvFocusRingNode != nil { return }
+        let focusRing = SKShapeNode()
+        focusRing.name = "tvFocusRing"
+        focusRing.zPosition = 80
+        focusRing.lineWidth = 5
+        focusRing.strokeColor = SKColor.white
+        focusRing.fillColor = .clear
+        focusRing.glowWidth = 2
+        focusRing.alpha = 0.95
+        focusRing.isHidden = true
+        addChild(focusRing)
+        tvFocusRingNode = focusRing
+    }
+
+    private func moveTVFocus(direction: CGVector) {
+        let candidates = tvFocusableCandidates()
+        guard !candidates.isEmpty else {
+            tvFocusRingNode?.isHidden = true
+            return
+        }
+
+        guard let current = currentTVFocusableCandidate(from: candidates) else {
+            tvFocusedElement = preferredInitialTVFocusElement(from: candidates)
+            updateTVFocusAppearance()
+            return
+        }
+
+        guard let next = nextTVFocusableCandidate(from: current, among: candidates, direction: direction) else {
+            updateTVFocusAppearance()
+            return
+        }
+
+        if next.element != current.element {
+            run(SKAction.playSoundFileNamed("click.wav", waitForCompletion: false))
+        }
+        tvFocusedElement = next.element
+        updateTVFocusAppearance()
+    }
+
+    private func activateTVFocusedElement(forced element: TVFocusableElement? = nil) {
+        let candidates = tvFocusableCandidates()
+        guard !candidates.isEmpty else { return }
+
+        let targetElement = element ?? tvFocusedElement
+        guard let candidate = candidates.first(where: { $0.element == targetElement }) else {
+            tvFocusedElement = preferredInitialTVFocusElement(from: candidates)
+            updateTVFocusAppearance()
+            return
+        }
+
+        tvFocusedElement = candidate.element
+        updateTVFocusAppearance()
+
+        switch candidate.element {
+        case .startButton:
+            handleInteraction(targetName: "startButton", at: candidate.center)
+        case .landmarkButton:
+            handleInteraction(targetName: "landmarkButton", at: candidate.center)
+        case .categoryButton:
+            handleInteraction(targetName: "categoryButton", at: candidate.center)
+        case .resetButton:
+            handleInteraction(targetName: "resetButton", at: candidate.center)
+        case .tower:
+            handleInteraction(targetName: "towerTarget", at: candidate.center)
+        case .ball:
+            handleInteraction(targetName: "ball", at: candidate.center)
+        case .guideLine:
+            handleInteraction(targetName: "guideLineTarget", at: candidate.center)
+        case let .domino(index):
+            guard dominos.indices.contains(index) else { return }
+            selectedDominoNode = dominos[index]
+            handleInteraction(targetName: "dominoTarget", at: candidate.center)
+        }
+    }
+
+    private func currentTVFocusableCandidate(from candidates: [TVFocusableCandidate]) -> TVFocusableCandidate? {
+        if let current = candidates.first(where: { $0.element == tvFocusedElement }) {
+            return current
+        }
+        return nil
+    }
+
+    private func preferredInitialTVFocusElement(from candidates: [TVFocusableCandidate]) -> TVFocusableElement {
+        if candidates.contains(where: { $0.element == .startButton }) {
+            return .startButton
+        }
+        return candidates[0].element
+    }
+
+    private func nextTVFocusableCandidate(
+        from current: TVFocusableCandidate,
+        among candidates: [TVFocusableCandidate],
+        direction: CGVector
+    ) -> TVFocusableCandidate? {
+        let directionLength = hypot(direction.dx, direction.dy)
+        guard directionLength > 0 else { return nil }
+
+        var bestCandidate: TVFocusableCandidate?
+        var bestScore = CGFloat.greatestFiniteMagnitude
+
+        for candidate in candidates where candidate.element != current.element {
+            let dx = candidate.center.x - current.center.x
+            let dy = candidate.center.y - current.center.y
+            let distance = hypot(dx, dy)
+            guard distance > 0 else { continue }
+
+            let dot = dx * direction.dx + dy * direction.dy
+            guard dot > 0 else { continue }
+
+            let alignment = dot / (distance * directionLength)
+            guard alignment >= 0.20 else { continue }
+
+            let perpendicular = abs(dx * direction.dy - dy * direction.dx)
+            let score = distance / max(alignment, 0.001) + perpendicular * 0.22
+
+            if score < bestScore {
+                bestScore = score
+                bestCandidate = candidate
+            }
+        }
+
+        return bestCandidate
+    }
+
+    private func tvFocusableCandidates() -> [TVFocusableCandidate] {
+        var candidates: [TVFocusableCandidate] = []
+
+        if startButtonEnabled, let candidate = makeTVButtonCandidate(startButton, element: .startButton) {
+            candidates.append(candidate)
+        }
+        if landmarkButtonEnabled, let candidate = makeTVButtonCandidate(landmarkButton, element: .landmarkButton) {
+            candidates.append(candidate)
+        }
+        if categoryButtonEnabled, let candidate = makeTVButtonCandidate(categoryButton, element: .categoryButton) {
+            candidates.append(candidate)
+        }
+        if resetButtonEnabled, let candidate = makeTVButtonCandidate(resetButton, element: .resetButton) {
+            candidates.append(candidate)
+        }
+
+        guard !isAnimating else { return candidates }
+
+        if landmarkButtonEnabled, let towerNode {
+            let frame = towerNode.calculateAccumulatedFrame().insetBy(dx: -12, dy: -12)
+            if frame.width > 0, frame.height > 0 {
+                candidates.append(
+                    TVFocusableCandidate(
+                        element: .tower,
+                        center: CGPoint(x: frame.midX, y: frame.midY),
+                        frame: frame
+                    )
+                )
+            }
+        }
+
+        if let ballNode {
+            let frame = ballNode.calculateAccumulatedFrame().insetBy(dx: -10, dy: -10)
+            if frame.width > 0, frame.height > 0 {
+                candidates.append(
+                    TVFocusableCandidate(
+                        element: .ball,
+                        center: CGPoint(x: frame.midX, y: frame.midY),
+                        frame: frame
+                    )
+                )
+            }
+        }
+
+        if staircaseNode != nil {
+            if let guideCandidate = makeTVGuideLineCandidate() {
+                candidates.append(guideCandidate)
+            }
+        }
+
+        for (index, domino) in dominos.enumerated() {
+            let frame = domino.calculateAccumulatedFrame().insetBy(dx: -8, dy: -12)
+            guard frame.width > 0, frame.height > 0 else { continue }
+            candidates.append(
+                TVFocusableCandidate(
+                    element: .domino(index: index),
+                    center: CGPoint(x: frame.midX, y: frame.midY),
+                    frame: frame
+                )
+            )
+        }
+
+        return candidates
+    }
+
+    private func makeTVButtonCandidate(_ button: SKShapeNode?, element: TVFocusableElement) -> TVFocusableCandidate? {
+        guard let button else { return nil }
+        let frame = button.calculateAccumulatedFrame().insetBy(dx: -8, dy: -8)
+        guard frame.width > 0, frame.height > 0 else { return nil }
+        return TVFocusableCandidate(
+            element: element,
+            center: CGPoint(x: frame.midX, y: frame.midY),
+            frame: frame
+        )
+    }
+
+    private func makeTVGuideLineCandidate() -> TVFocusableCandidate? {
+        guard let staircase = staircaseNode else { return nil }
+        let frame = staircase.calculateAccumulatedFrame()
+        if frame.width <= 0 || frame.height <= 0 { return nil }
+
+        let midIndex = staircase.rollPath.count / 2
+        if staircase.rollPath.indices.contains(midIndex) {
+            let midPoint = staircase.rollPath[midIndex].position
+            let candidateFrame = CGRect(x: midPoint.x - 90, y: midPoint.y - 30, width: 180, height: 60)
+            return TVFocusableCandidate(
+                element: .guideLine,
+                center: midPoint,
+                frame: candidateFrame
+            )
+        }
+
+        return TVFocusableCandidate(
+            element: .guideLine,
+            center: CGPoint(x: frame.midX, y: frame.midY),
+            frame: CGRect(x: frame.midX - 90, y: frame.midY - 30, width: 180, height: 60)
+        )
+    }
+
+    private func ensureTVFocusedElementIsValid() {
+        let candidates = tvFocusableCandidates()
+        guard !candidates.isEmpty else {
+            tvFocusRingNode?.isHidden = true
+            return
+        }
+
+        if !candidates.contains(where: { $0.element == tvFocusedElement }) {
+            tvFocusedElement = preferredInitialTVFocusElement(from: candidates)
+        }
+    }
+
+    private func updateTVFocusAppearance() {
+        ensureTVFocusRingNode()
+        let candidates = tvFocusableCandidates()
+        guard !candidates.isEmpty else {
+            tvFocusRingNode?.isHidden = true
+            return
+        }
+
+        if !candidates.contains(where: { $0.element == tvFocusedElement }) {
+            tvFocusedElement = preferredInitialTVFocusElement(from: candidates)
+        }
+
+        guard let focusedCandidate = candidates.first(where: { $0.element == tvFocusedElement }) else {
+            tvFocusRingNode?.isHidden = true
+            return
+        }
+
+        let ringFrame = focusedCandidate.frame
+        let cornerRadius = min(20, max(10, min(ringFrame.width, ringFrame.height) * 0.24))
+        let ringPath = CGPath(
+            roundedRect: ringFrame,
+            cornerWidth: cornerRadius,
+            cornerHeight: cornerRadius,
+            transform: nil
+        )
+
+        tvFocusRingNode?.path = ringPath
+        tvFocusRingNode?.isHidden = false
+    }
+#endif
     
     private func buttonName(at location: CGPoint) -> String? {
         let nodesAtPoint = nodes(at: location)
@@ -874,65 +1396,47 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     private func presentLandmarkPicker() {
-        guard let presenter = presentingViewController() else { return }
-        
-        let alert = UIAlertController(title: "Choose Building", message: "Pick one building", preferredStyle: .actionSheet)
-        
-        for landmark in TowerNode.Landmark.allCases {
-            let landmarkTitle = "\(landmark.thumbnailIcon) \(landmark.englishName)"
-            let title = landmark == selectedLandmark ? "\(landmarkTitle) ✓" : landmarkTitle
-            let action = UIAlertAction(title: title, style: .default) { [weak self] _ in
-                self?.applySelectedLandmark(landmark)
-            }
-            alert.addAction(action)
+        let options = TowerNode.Landmark.allCases.map { landmark in
+            PickerPresenter.Option(
+                title: "\(landmark.thumbnailIcon) \(landmark.englishName)",
+                isSelected: landmark == selectedLandmark
+            )
         }
-        
-        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
-        
-        if let popover = alert.popoverPresentationController, let sceneView = view {
-            popover.sourceView = sceneView
-            let anchorPoint = landmarkButton?.position ?? CGPoint(x: size.width / 2, y: size.height * 0.1)
-            let anchorInView = convertPoint(toView: anchorPoint)
-            popover.sourceRect = CGRect(x: anchorInView.x, y: anchorInView.y, width: 1, height: 1)
-            popover.permittedArrowDirections = [.up, .down]
+        let currentLayout = layout ?? makeLayout(for: size)
+        let anchor = landmarkButton?.position ?? CGPoint(x: currentLayout.contentFrame.midX, y: currentLayout.buttonY)
+        PickerPresenter.presentActionSheet(
+            title: "Choose Building", message: "Pick one building",
+            options: options, anchor: anchor, scene: self
+        ) { [weak self] index in
+            let landmark = TowerNode.Landmark.allCases[index]
+            self?.applySelectedLandmark(landmark)
         }
-        
-        presenter.present(alert, animated: true)
     }
     
     private func applySelectedLandmark(_ landmark: TowerNode.Landmark) {
         speakEnglish(landmark.englishName)
         guard selectedLandmark != landmark else { return }
         selectedLandmark = landmark
+        UserDefaults.standard.set(TowerNode.Landmark.allCases.firstIndex(of: landmark) ?? 0, forKey: UDKeys.landmarkIndex)
         updateSubtitleText()
         replaceTower()
     }
 
     private func presentLearningCategoryPicker() {
-        guard let presenter = presentingViewController() else { return }
-
-        let alert = UIAlertController(title: "选择学习主题", message: "适合 4 岁儿童的图片词汇", preferredStyle: .actionSheet)
-
-        for (index, category) in learningCategories.enumerated() {
-            let baseTitle = "\(category.icon) \(category.displayName) · \(category.englishName)"
-            let title = index == selectedLearningCategoryIndex ? "\(baseTitle) ✓" : baseTitle
-            let action = UIAlertAction(title: title, style: .default) { [weak self] _ in
-                self?.applySelectedLearningCategory(index: index)
-            }
-            alert.addAction(action)
+        let options = learningCategories.enumerated().map { index, category in
+            PickerPresenter.Option(
+                title: "\(category.icon) \(category.displayName) · \(category.englishName)",
+                isSelected: index == selectedLearningCategoryIndex
+            )
         }
-
-        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
-
-        if let popover = alert.popoverPresentationController, let sceneView = view {
-            popover.sourceView = sceneView
-            let anchorPoint = categoryButton?.position ?? CGPoint(x: size.width / 2, y: size.height * 0.1)
-            let anchorInView = convertPoint(toView: anchorPoint)
-            popover.sourceRect = CGRect(x: anchorInView.x, y: anchorInView.y, width: 1, height: 1)
-            popover.permittedArrowDirections = [.up, .down]
+        let currentLayout = layout ?? makeLayout(for: size)
+        let anchor = categoryButton?.position ?? CGPoint(x: currentLayout.contentFrame.midX, y: currentLayout.buttonY)
+        PickerPresenter.presentActionSheet(
+            title: "选择学习主题", message: "适合 4 岁儿童的图片词汇",
+            options: options, anchor: anchor, scene: self
+        ) { [weak self] index in
+            self?.applySelectedLearningCategory(index: index)
         }
-
-        presenter.present(alert, animated: true)
     }
 
     private func applySelectedLearningCategory(index: Int) {
@@ -943,6 +1447,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         guard selectedLearningCategoryIndex != index else { return }
 
         selectedLearningCategoryIndex = index
+        UserDefaults.standard.set(index, forKey: UDKeys.learningCategoryIndex)
         selectedDominoLearningItemIndices.removeAll()
         updateLearningThemeButtonTitle()
         updateSubtitleText()
@@ -956,17 +1461,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         makeTower(layout: layout)
     }
     
-    private func presentingViewController() -> UIViewController? {
-        var responder: UIResponder? = view
-        while let current = responder {
-            if let controller = current as? UIViewController {
-                return controller
-            }
-            responder = current.next
-        }
-        return nil
-    }
-    
+
     private func touchedDomino(at location: CGPoint) -> DominoNode? {
         let nodesAtPoint = nodes(at: location)
         for node in nodesAtPoint {
@@ -1007,34 +1502,20 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func presentDominoLearningPicker() {
         guard let targetDomino = selectedDominoNode else { return }
-        guard let presenter = presentingViewController() else { return }
-
         let category = currentLearningCategory()
-        let alert = UIAlertController(
+        let options = category.items.enumerated().map { index, item in
+            PickerPresenter.Option(
+                title: "\(item.icon) \(item.englishName) (\(item.chineseName))",
+                isSelected: index == targetDomino.colorOptionIndex
+            )
+        }
+        PickerPresenter.presentActionSheet(
             title: "选择图片与英语单词",
             message: "主题：\(category.icon)\(category.displayName)",
-            preferredStyle: .actionSheet
-        )
-
-        for (index, item) in category.items.enumerated() {
-            let baseTitle = "\(item.icon) \(item.englishName) (\(item.chineseName))"
-            let title = index == targetDomino.colorOptionIndex ? "\(baseTitle) ✓" : baseTitle
-            let action = UIAlertAction(title: title, style: .default) { [weak self] _ in
-                self?.applySelectedDominoLearning(index: index, to: targetDomino)
-            }
-            alert.addAction(action)
+            options: options, anchor: targetDomino.position, scene: self
+        ) { [weak self] index in
+            self?.applySelectedDominoLearning(index: index, to: targetDomino)
         }
-
-        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
-
-        if let popover = alert.popoverPresentationController, let sceneView = view {
-            popover.sourceView = sceneView
-            let anchorInView = convertPoint(toView: targetDomino.position)
-            popover.sourceRect = CGRect(x: anchorInView.x, y: anchorInView.y, width: 1, height: 1)
-            popover.permittedArrowDirections = [.up, .down]
-        }
-
-        presenter.present(alert, animated: true)
     }
 
     private func applySelectedDominoLearning(index: Int, to domino: DominoNode) {
@@ -1069,6 +1550,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         speakEnglish(option.englishName)
         guard selectedBallColorOptionIndex != index else { return }
         selectedBallColorOptionIndex = index
+        UserDefaults.standard.set(index, forKey: UDKeys.ballColorIndex)
 
         guard let ballNode = ballNode else { return }
         ballNode.fillColor = option.color
@@ -1092,6 +1574,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         speakEnglish(option.englishName)
         guard selectedGuideLineColorOptionIndex != index else { return }
         selectedGuideLineColorOptionIndex = index
+        UserDefaults.standard.set(index, forKey: UDKeys.guideLineColorIndex)
 
         staircaseNode?.updateGuideColor(option.color)
     }
@@ -1111,28 +1594,14 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         anchor: CGPoint,
         onSelect: @escaping (Int) -> Void
     ) {
-        guard let presenter = presentingViewController() else { return }
-
-        let alert = UIAlertController(title: title, message: message, preferredStyle: .actionSheet)
-
-        for (index, option) in dominoColorOptions.enumerated() {
-            let optionTitle = index == currentIndex ? "\(option.name) ✓" : option.name
-            let action = UIAlertAction(title: optionTitle, style: .default) { _ in
-                onSelect(index)
-            }
-            alert.addAction(action)
+        let options = dominoColorOptions.enumerated().map { index, option in
+            PickerPresenter.Option(title: option.name, isSelected: index == currentIndex)
         }
-
-        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
-
-        if let popover = alert.popoverPresentationController, let sceneView = view {
-            popover.sourceView = sceneView
-            let anchorInView = convertPoint(toView: anchor)
-            popover.sourceRect = CGRect(x: anchorInView.x, y: anchorInView.y, width: 1, height: 1)
-            popover.permittedArrowDirections = [.up, .down]
-        }
-
-        presenter.present(alert, animated: true)
+        PickerPresenter.presentActionSheet(
+            title: title, message: message,
+            options: options, anchor: anchor, scene: self,
+            onSelect: onSelect
+        )
     }
 
     private func colorOption(at index: Int) -> DominoColorOption? {
@@ -1281,250 +1750,14 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private func explodeScene() {
         guard !hasTriggeredExplosion else { return }
         hasTriggeredExplosion = true
-        
-        run(SKAction.playSoundFileNamed("explode.wav", waitForCompletion: false))
-        
-        let colors: [SKColor] = [
-            GameConstants.Colors.dominos[0],
-            GameConstants.Colors.dominos[1],
-            GameConstants.Colors.dominos[2],
-            GameConstants.Colors.dominos[3],
-            GameConstants.Colors.dominos[4],
-            GameConstants.Colors.towerBase,
-            GameConstants.Colors.towerFlag
-        ]
-        let budget = explosionBudget()
-        
-        // Explode dominos
-        for domino in dominos {
-            domino.isHidden = true
-            createExplosion(
-                at: domino.position,
-                color: domino.color,
-                particleCount: Int.random(in: budget.particlesPerBurst),
-                particleSpeed: budget.particleSpeed,
-                includeSmoke: Int.random(in: 0...4) == 0
-            )
-        }
-        
-        // Explode tower using sampled points from the full tower bounds.
-        // This avoids creating hundreds of emitters on complex landmarks and is stable on older iPads.
-        if let tower = towerNode {
-            let points = towerExplosionPoints(for: tower, limit: budget.maxTowerEmitters)
-            tower.isHidden = true
-            
-            for point in points {
-                let randomColor = colors.randomElement() ?? GameConstants.Colors.towerBase
-                createExplosion(
-                    at: point,
-                    color: randomColor,
-                    particleCount: Int.random(in: budget.particlesPerBurst),
-                    particleSpeed: budget.particleSpeed,
-                    includeSmoke: true
-                )
-            }
-        }
+        explosionEffect?.explode(
+            dominos: dominos,
+            tower: towerNode,
+            sceneSize: size,
+            baseDominoHeight: layout?.baseDominoHeight ?? 40
+        )
     }
-    
-    private func createExplosion(at position: CGPoint, color: SKColor, particleCount: Int, particleSpeed: CGFloat, includeSmoke: Bool) {
-        addExplosionFlash(at: position, color: color)
-        
-        let texture = resolvedExplosionParticleTexture()
-        let lowHeight = size.height * 0.32
-        let verticalLift = position.y < lowHeight ? max(size.height * 0.08, 26) : 0
-        let elevatedPosition = CGPoint(x: position.x, y: min(position.y + verticalLift, size.height * 0.92))
-        let burstHeight = max((layout?.baseDominoHeight ?? 40) * 0.65, size.height * 0.08)
-        let burstOrigin = CGPoint(x: 0, y: burstHeight / 2)
-        let burstRange = CGVector(dx: 18, dy: burstHeight * 1.1)
-        
-        // Core burst: bright, fast, short-lived.
-        let coreEmitter = SKEmitterNode()
-        coreEmitter.name = "explosionEmitter"
-        coreEmitter.targetNode = self
-        coreEmitter.particleTexture = texture
-        coreEmitter.particleBirthRate = 380
-        coreEmitter.numParticlesToEmit = max(2, Int(CGFloat(particleCount) * 0.7))
-        coreEmitter.particleLifetime = 0.9
-        coreEmitter.particleLifetimeRange = 0.25
-        coreEmitter.particlePosition = burstOrigin
-        coreEmitter.particlePositionRange = burstRange
-        coreEmitter.emissionAngle = .pi / 2
-        coreEmitter.emissionAngleRange = .pi * 2
-        coreEmitter.particleSpeed = particleSpeed * 1.05
-        coreEmitter.particleSpeedRange = particleSpeed * 0.65
-        coreEmitter.yAcceleration = -480
-        coreEmitter.particleAlpha = 1.0
-        coreEmitter.particleAlphaRange = 0.2
-        coreEmitter.particleAlphaSpeed = -1.15
-        coreEmitter.particleScale = 0.065
-        coreEmitter.particleScaleRange = 0.04
-        coreEmitter.particleScaleSpeed = -0.04
-        coreEmitter.particleRotationRange = .pi * 2
-        coreEmitter.particleRotationSpeed = 9.0
-        coreEmitter.particleBlendMode = .add
-        coreEmitter.particleColor = color
-        coreEmitter.particleColorBlendFactor = 1.0
-        coreEmitter.position = elevatedPosition
-        coreEmitter.zPosition = 34
-        addChild(coreEmitter)
-        
-        // Debris burst: slower, lingering, less additive for depth.
-        let debrisEmitter = SKEmitterNode()
-        debrisEmitter.name = "explosionEmitter"
-        debrisEmitter.targetNode = self
-        debrisEmitter.particleTexture = texture
-        debrisEmitter.particleBirthRate = 280
-        debrisEmitter.numParticlesToEmit = max(2, Int(CGFloat(particleCount) * 0.55))
-        debrisEmitter.particleLifetime = 1.6
-        debrisEmitter.particleLifetimeRange = 0.45
-        debrisEmitter.particlePosition = burstOrigin
-        debrisEmitter.particlePositionRange = burstRange
-        debrisEmitter.emissionAngle = .pi / 2
-        debrisEmitter.emissionAngleRange = .pi * 2
-        debrisEmitter.particleSpeed = particleSpeed * 0.55
-        debrisEmitter.particleSpeedRange = particleSpeed * 0.35
-        debrisEmitter.yAcceleration = -360
-        debrisEmitter.particleAlpha = 0.7
-        debrisEmitter.particleAlphaRange = 0.2
-        debrisEmitter.particleAlphaSpeed = -0.4
-        debrisEmitter.particleScale = 0.09
-        debrisEmitter.particleScaleRange = 0.05
-        debrisEmitter.particleScaleSpeed = -0.02
-        debrisEmitter.particleRotationRange = .pi * 2
-        debrisEmitter.particleRotationSpeed = 4.5
-        debrisEmitter.particleBlendMode = .alpha
-        debrisEmitter.particleColor = color
-        debrisEmitter.particleColorBlendFactor = 0.9
-        debrisEmitter.position = elevatedPosition
-        debrisEmitter.zPosition = 33
-        addChild(debrisEmitter)
-        
-        if includeSmoke {
-            createSmokePlume(at: elevatedPosition)
-        }
-        
-        let coreDuration = CGFloat(coreEmitter.particleLifetime + coreEmitter.particleLifetimeRange + 0.12)
-        coreEmitter.run(SKAction.sequence([
-            SKAction.wait(forDuration: TimeInterval(coreDuration)),
-            SKAction.removeFromParent()
-        ]))
-        
-        let debrisDuration = CGFloat(debrisEmitter.particleLifetime + debrisEmitter.particleLifetimeRange + 0.2)
-        debrisEmitter.run(SKAction.sequence([
-            SKAction.wait(forDuration: TimeInterval(debrisDuration)),
-            SKAction.removeFromParent()
-        ]))
-    }
-    
-    private func addExplosionFlash(at position: CGPoint, color: SKColor) {
-        let flash = SKShapeNode(circleOfRadius: 12)
-        flash.name = "explosionEmitter"
-        flash.fillColor = color.withAlphaComponent(0.9)
-        flash.strokeColor = SKColor.white.withAlphaComponent(0.9)
-        flash.lineWidth = 1.8
-        flash.glowWidth = 8.0
-        flash.alpha = 0
-        flash.position = position
-        flash.zPosition = 35
-        addChild(flash)
-        
-        let appear = SKAction.group([
-            SKAction.fadeAlpha(to: 1.0, duration: 0.03),
-            SKAction.scale(to: 1.35, duration: 0.03)
-        ])
-        let fadeOut = SKAction.group([
-            SKAction.fadeOut(withDuration: 0.28),
-            SKAction.scale(to: 3.4, duration: 0.28)
-        ])
-        flash.run(SKAction.sequence([appear, fadeOut, SKAction.removeFromParent()]))
-    }
-    
-    private func createSmokePlume(at position: CGPoint) {
-        let smoke = SKEmitterNode()
-        smoke.name = "explosionEmitter"
-        smoke.targetNode = self
-        smoke.particleTexture = resolvedExplosionParticleTexture()
-        
-        smoke.particleBirthRate = 120
-        smoke.numParticlesToEmit = Int.random(in: 8...12)
-        smoke.particleLifetime = 2.1
-        smoke.particleLifetimeRange = 0.55
-        
-        smoke.particlePosition = .zero
-        smoke.particlePositionRange = CGVector(dx: 12, dy: 10)
-        smoke.emissionAngle = .pi / 2
-        smoke.emissionAngleRange = .pi / 3
-        smoke.particleSpeed = 52
-        smoke.particleSpeedRange = 26
-        smoke.yAcceleration = 54
-        
-        smoke.particleAlpha = 0.32
-        smoke.particleAlphaRange = 0.16
-        smoke.particleAlphaSpeed = -0.15
-        
-        smoke.particleScale = 0.19
-        smoke.particleScaleRange = 0.09
-        smoke.particleScaleSpeed = 0.06
-        
-        smoke.particleColor = SKColor(white: 0.26, alpha: 1.0)
-        smoke.particleColorBlendFactor = 1.0
-        smoke.particleBlendMode = .alpha
-        
-        smoke.position = position
-        smoke.zPosition = 32
-        addChild(smoke)
-        
-        let duration = CGFloat(smoke.particleLifetime + smoke.particleLifetimeRange + 0.24)
-        smoke.run(SKAction.sequence([
-            SKAction.wait(forDuration: TimeInterval(duration)),
-            SKAction.removeFromParent()
-        ]))
-    }
-    
-    private func explosionBudget() -> (maxTowerEmitters: Int, particlesPerBurst: ClosedRange<Int>, particleSpeed: CGFloat) {
-        let lowMemoryDevice = ProcessInfo.processInfo.physicalMemory <= 3_500_000_000
-        let reducedMode = lowMemoryDevice || ProcessInfo.processInfo.isLowPowerModeEnabled
-        
-        if reducedMode {
-            return (maxTowerEmitters: 10, particlesPerBurst: 13...18, particleSpeed: 200)
-        }
-        return (maxTowerEmitters: 18, particlesPerBurst: 17...24, particleSpeed: 245)
-    }
-    
-    private func towerExplosionPoints(for tower: SKNode, limit: Int) -> [CGPoint] {
-        guard limit > 0 else { return [] }
-        
-        let frame = tower.calculateAccumulatedFrame()
-        guard !frame.isNull, frame.width > 0, frame.height > 0 else { return [] }
-        
-        let columns = 4
-        let rows = max(2, Int(ceil(Double(limit) / Double(columns))))
-        var points: [CGPoint] = []
-        points.reserveCapacity(limit)
-        
-        for row in 0..<rows {
-            for column in 0..<columns {
-                if points.count >= limit {
-                    return points
-                }
-                
-                let u = (CGFloat(column) + 0.5) / CGFloat(columns)
-                let v = (CGFloat(row) + 0.5) / CGFloat(rows)
-                let jitterX = CGFloat.random(in: -frame.width * 0.07...frame.width * 0.07)
-                let jitterY = CGFloat.random(in: -frame.height * 0.04...frame.height * 0.04)
-                
-                points.append(
-                    CGPoint(
-                        x: frame.minX + frame.width * u + jitterX,
-                        y: frame.minY + frame.height * v + jitterY
-                    )
-                )
-            }
-        }
-        
-        return points
-    }
-    
+
     // MARK: - Helpers
     
     private func gradientTexture(size: CGSize, colors: [UIColor]) -> SKTexture {
@@ -1543,50 +1776,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         texture.filteringMode = .linear
         return texture
     }
-    
-    private func resolvedExplosionParticleTexture() -> SKTexture {
-        if let cached = explosionParticleTexture {
-            return cached
-        }
-        
-        if let sparkImage = UIImage(named: "spark") {
-            let texture = SKTexture(image: sparkImage)
-            texture.filteringMode = .linear
-            explosionParticleTexture = texture
-            return texture
-        }
-        
-        // Resource fallback: generate a small soft circular particle.
-        let size = CGSize(width: 24, height: 24)
-        let image = UIGraphicsImageRenderer(size: size).image { context in
-            let rect = CGRect(origin: .zero, size: size)
-            let center = CGPoint(x: rect.midX, y: rect.midY)
-            let colors = [
-                UIColor.white.withAlphaComponent(1).cgColor,
-                UIColor.white.withAlphaComponent(0).cgColor
-            ] as CFArray
-            
-            if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1]) {
-                context.cgContext.drawRadialGradient(
-                    gradient,
-                    startCenter: center,
-                    startRadius: 1,
-                    endCenter: center,
-                    endRadius: rect.width * 0.5,
-                    options: [.drawsAfterEndLocation]
-                )
-            } else {
-                context.cgContext.setFillColor(UIColor.white.cgColor)
-                context.cgContext.fillEllipse(in: rect)
-            }
-        }
-        
-        let texture = SKTexture(image: image)
-        texture.filteringMode = .linear
-        explosionParticleTexture = texture
-        return texture
-    }
-    
+
     private func clamp(_ value: CGFloat, min: CGFloat, max: CGFloat) -> CGFloat {
         Swift.max(min, Swift.min(max, value))
     }
@@ -1682,11 +1872,12 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                 guard self.isAnimating else { return }
                 guard let ball = self.ballNode else { return }
                 guard let firstDomino = self.dominos.first else { return }
+                let sizeFactor = max(1.0, firstDomino.height / 72.0)
 
                 let firstDominoLeftEdge = firstDomino.position.x - firstDomino.width
                 let releasePosition = CGPoint(
-                    x: firstDominoLeftEdge - layout.ballRadius * 1.02,
-                    y: layout.groundY + layout.ballRadius
+                    x: firstDominoLeftEdge - layout.ballRadius * (layout.isPad ? 0.72 : 0.86),
+                    y: layout.groundY + max(layout.ballRadius * 0.95, min(firstDomino.height * 0.40, layout.ballRadius * 1.95))
                 )
 
                 ball.removeAllActions()
@@ -1704,16 +1895,22 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                 ballBody.isResting = false
                 ballBody.velocity = .zero
                 ballBody.angularVelocity = 0
-                ballBody.velocity = CGVector(dx: layout.ballRadius * 8.0, dy: 0)
-                ballBody.applyImpulse(CGVector(dx: layout.ballRadius * 0.4, dy: 0))
+                let launchSpeed = layout.ballRadius * (9.2 + (sizeFactor - 1.0) * 2.0)
+                ballBody.velocity = CGVector(dx: launchSpeed, dy: 0)
+                ballBody.applyImpulse(CGVector(dx: layout.ballRadius * (0.62 + (sizeFactor - 1.0) * 0.28), dy: 0))
                 ballBody.applyAngularImpulse(-0.01)
 
                 // Give the first domino a manual tip so it gracefully falls and starts the chain
                 if let firstBody = firstDomino.physicsBodyForSimulation {
                     firstBody.isResting = false
-                    // 加大角冲量和推力，确保100%击倒
-                    firstBody.applyAngularImpulse(-0.06)
-                    firstBody.applyImpulse(CGVector(dx: 2.0, dy: 0), at: CGPoint(x: -firstDomino.width / 2, y: firstDomino.height * 0.8))
+                    let tipAngularImpulse = 0.11 * sizeFactor
+                    let tipLinearImpulse = max(layout.ballRadius * 0.82, firstDomino.height * 0.11)
+                    firstBody.applyAngularImpulse(-tipAngularImpulse)
+                    firstBody.applyImpulse(
+                        CGVector(dx: tipLinearImpulse, dy: 0),
+                        at: CGPoint(x: -firstDomino.width * 0.82, y: firstDomino.height * 0.88)
+                    )
+                    firstBody.angularVelocity = min(firstBody.angularVelocity, -2.2 * sizeFactor)
                 }
 
                 self.firstImpactTelemetry.directAssistCount += 1
@@ -1739,20 +1936,26 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func scheduleFirstImpactFallback(layout: Layout) {
         let fallback = SKAction.sequence([
-            SKAction.wait(forDuration: 0.16),
+            SKAction.wait(forDuration: 0.12),
             SKAction.run { [weak self] in
                 guard let self else { return }
                 guard self.isAnimating else { return }
                 guard let firstDomino = self.dominos.first else { return }
                 guard !firstDomino.hasFallen else { return }
                 guard let firstBody = firstDomino.physicsBodyForSimulation else { return }
-
-                let stillStuck = abs(firstBody.angularVelocity) < 0.22 && abs(firstBody.velocity.dx) < layout.ballRadius * 1.4
-                guard stillStuck else { return }
+                let sizeFactor = max(1.0, firstDomino.height / 72.0)
+                let needsBoost = abs(firstBody.angularVelocity) < (1.8 * sizeFactor)
+                guard needsBoost else { return }
 
                 firstBody.isResting = false
-                firstBody.applyImpulse(CGVector(dx: layout.ballRadius * 0.48, dy: 0))
-                firstBody.applyAngularImpulse(-0.055)
+                let fallbackLinearImpulse = max(layout.ballRadius * 1.08, firstDomino.height * 0.14)
+                let fallbackAngularImpulse = 0.15 * sizeFactor
+                firstBody.applyImpulse(
+                    CGVector(dx: fallbackLinearImpulse, dy: 0),
+                    at: CGPoint(x: -firstDomino.width * 0.85, y: firstDomino.height * 0.9)
+                )
+                firstBody.applyAngularImpulse(-fallbackAngularImpulse)
+                firstBody.angularVelocity = min(firstBody.angularVelocity, -3.0 * sizeFactor)
                 self.firstImpactTelemetry.fallbackAssistCount += 1
                 self.logger.notice("Run \(self.firstImpactTelemetry.runID) fallback first-impact assist fired.")
                 self.lastProgressTime = CACurrentMediaTime()

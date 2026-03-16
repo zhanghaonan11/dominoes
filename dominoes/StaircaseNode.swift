@@ -19,23 +19,42 @@ final class StaircaseNode: SKNode {
     private weak var guideGlowNode: SKShapeNode?
     private weak var guideLineNode: SKShapeNode?
     
-    static func build(startX: CGFloat, groundY: CGFloat, height: CGFloat, ballRadius: CGFloat, guideColor: SKColor) -> StaircaseNode {
+    static func build(
+        startX: CGFloat,
+        groundY: CGFloat,
+        height: CGFloat,
+        ballRadius: CGFloat,
+        guideColor: SKColor,
+        minimumX: CGFloat = -.greatestFiniteMagnitude,
+        curveFactor: CGFloat = 1.0,
+        bendDirection: CGFloat = 1.0
+    ) -> StaircaseNode {
         let node = StaircaseNode()
+        let curve = max(0.8, min(curveFactor, 1.8))
+        let bendSign: CGFloat = bendDirection >= 0 ? 1.0 : -1.0
         
         let pathSegments = 10
         let stepDrop = height / CGFloat(pathSegments)
-        let maxOffset: CGFloat = 98
-        let minOffset: CGFloat = 28
+        let nominalMaxOffset: CGFloat = 98 * curve
+        let nominalMinOffset: CGFloat = max(24, 28 * (0.95 + (curve - 1) * 0.25))
+        let availableLeftSpace = max(12, startX - minimumX)
+        let maxOffset = minimumX > -.greatestFiniteMagnitude
+            ? min(nominalMaxOffset, availableLeftSpace)
+            : nominalMaxOffset
+        let minOffsetUpperBound = max(8, maxOffset - 6)
+        let minOffset = min(nominalMinOffset, minOffsetUpperBound)
+        let bendAmplitude: CGFloat = 12.0 * curve
         
-        var guidePoints: [CGPoint] = []
+        var rawGuidePoints: [CGPoint] = []
+        var rawRollPath: [StairPathPoint] = []
         
-        let sagDepth = height * 0.08
+        let sagDepth = height * (0.08 + (curve - 1) * 0.02)
         
         for i in 0...pathSegments {
             let phase = CGFloat(i) / CGFloat(pathSegments)
             let eased = pow(phase, 1.35)
             let xOffset = lerp(from: maxOffset, to: minOffset, t: eased)
-            let bend = sin(.pi * phase) * 12.0
+            let bend = sin(.pi * phase) * bendAmplitude * bendSign
             let depth = 0.35 + sin(.pi * phase) * 0.65
             let sag = sin(.pi * phase) * sagDepth
             
@@ -43,9 +62,9 @@ final class StaircaseNode: SKNode {
                 x: startX - xOffset + bend,
                 y: groundY + height - CGFloat(i) * stepDrop + ballRadius * 0.16 - sag
             )
-            guidePoints.append(point)
+            rawGuidePoints.append(point)
             
-            node.rollPath.append(
+            rawRollPath.append(
                 StairPathPoint(
                     position: point,
                     zPosition: depth > 0.52 ? 3.6 : 1.2,
@@ -54,17 +73,20 @@ final class StaircaseNode: SKNode {
             )
         }
         
-        if let last = node.rollPath.last {
+        if let last = rawRollPath.last {
             // Keep the endpoint slightly lower than the last stair point so the guide ends cleanly
             // without the upward hook near the ground.
             let exitY = max(groundY + ballRadius * 0.1, last.position.y - ballRadius * 0.18)
+            let exitX = startX - ballRadius * 0.8
             let exitPoint = CGPoint(
-                x: (last.position.x + startX) * 0.56,
+                x: exitX,
                 y: exitY
             )
-            guidePoints.append(exitPoint)
-            node.rollPath.append(StairPathPoint(position: exitPoint, zPosition: 3.35, scale: 1.03))
+            rawGuidePoints.append(exitPoint)
+            rawRollPath.append(StairPathPoint(position: exitPoint, zPosition: 3.35, scale: 1.03))
         }
+        let guidePoints = rawGuidePoints
+        node.rollPath = rawRollPath
         
         let smoothPath = makeSmoothPath(points: guidePoints)
         
