@@ -1,8 +1,13 @@
 /**
  * 多米诺骨牌类
  */
+const DOMINO_BASE_DIMENSIONS = Object.freeze({
+    width: 30,
+    height: 75
+});
+
 class Domino {
-    constructor(x, y, character, size = 'medium', isNumber = false, customDimensions = null, isAnimal = false, animalData = null) {
+    constructor(x, y, character, isNumber = false, customDimensions = null, isAnimal = false, animalData = null) {
         this.x = x;
         this.y = y;
         this.character = character;
@@ -10,22 +15,13 @@ class Domino {
         this.isAnimal = isAnimal;
         this.animalData = animalData;  // { emoji, name, nameCn }
 
-        // 根据大小设置尺寸
-        const sizes = {
-            small: { width: 20, height: 50 },
-            medium: { width: 30, height: 75 },
-            large: { width: 40, height: 100 }
-        };
-
-        this.size = size;
-
         // 支持自定义尺寸
         if (customDimensions) {
             this.width = customDimensions.width;
             this.height = customDimensions.height;
         } else {
-            this.width = sizes[size].width;
-            this.height = sizes[size].height;
+            this.width = DOMINO_BASE_DIMENSIONS.width;
+            this.height = DOMINO_BASE_DIMENSIONS.height;
         }
 
         // 物理属性
@@ -215,7 +211,15 @@ class Domino {
      * 创建骨牌副本
      */
     clone() {
-        return new Domino(this.x, this.y, this.character, this.size, this.isNumber);
+        return new Domino(
+            this.x,
+            this.y,
+            this.character,
+            this.isNumber,
+            { width: this.width, height: this.height },
+            this.isAnimal,
+            this.animalData
+        );
     }
 }
 

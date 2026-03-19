@@ -39,7 +39,6 @@ class DominoGame {
         this.selectedIsAnimal = false;
         this.selectedAnimalData = null;
         this.selectedBuilding = null;  // 选中的建筑类型
-        this.currentSize = 'medium';
         this.isAnimating = false;
 
         // 小球状态
@@ -171,13 +170,6 @@ class DominoGame {
 
         // 推倒按钮
         this.pushBtn.addEventListener('click', () => this.startDominoEffect());
-
-        // 大小选择
-        document.querySelectorAll('input[name="size"]').forEach(radio => {
-            radio.addEventListener('change', (e) => {
-                this.currentSize = e.target.value;
-            });
-        });
 
         // 点击庆祝界面关闭
         this.celebration.addEventListener('click', () => {
@@ -354,21 +346,13 @@ class DominoGame {
      * 放置骨牌
      */
     placeDomino(x, y) {
-        // 基础尺寸配置
-        const baseSizes = {
-            small: { width: 20, height: 50 },
-            medium: { width: 30, height: 75 },
-            large: { width: 40, height: 100 }
-        };
-
         // 根据已放置骨牌数量计算递增尺寸
         const count = this.dominoes.length;
-        const baseSize = baseSizes[this.currentSize];
         const growthFactor = 1 + count * 0.08;  // 每个骨牌增大8%
 
         const customDimensions = {
-            width: Math.round(baseSize.width * growthFactor),
-            height: Math.round(baseSize.height * growthFactor)
+            width: Math.round(DOMINO_BASE_DIMENSIONS.width * growthFactor),
+            height: Math.round(DOMINO_BASE_DIMENSIONS.height * growthFactor)
         };
 
         // 骨牌底部自动对齐到画布底部
@@ -393,7 +377,6 @@ class DominoGame {
             x,
             y,
             this.selectedCharacter,
-            this.currentSize,
             this.selectedIsNumber,
             customDimensions,
             this.selectedIsAnimal,

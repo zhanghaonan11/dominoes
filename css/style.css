@@ -315,49 +315,6 @@ body::before {
     box-shadow: 0 0 15px rgba(255, 0, 255, 0.25);
 }
 
-/* 大小选择器 */
-.size-selector {
-    display: flex;
-    justify-content: center;
-    gap: 12px;
-    background: rgba(0, 0, 0, 0.2);
-    padding: 6px;
-    border-radius: 30px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.size-selector label {
-    cursor: pointer;
-    flex: 1;
-}
-
-.size-selector input {
-    display: none;
-}
-
-.size-option {
-    display: block;
-    text-align: center;
-    padding: 8px 16px;
-    color: var(--text-muted);
-    border-radius: 20px;
-    font-weight: 600;
-    transition: all 0.3s ease;
-    border: 1px solid transparent;
-}
-
-.size-option:hover {
-    color: var(--text-main);
-    background: rgba(255, 255, 255, 0.05);
-}
-
-.size-selector input:checked+.size-option {
-    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
-    color: #000;
-    box-shadow: 0 4px 10px rgba(0, 242, 255, 0.3);
-    border-color: rgba(255, 255, 255, 0.2);
-}
-
 .hint {
     font-size: 0.9rem;
     color: var(--text-muted);
