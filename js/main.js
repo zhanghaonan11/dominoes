@@ -166,10 +166,14 @@ class DominoGame {
         });
 
         // 重置按钮
-        this.resetBtn.addEventListener('click', () => this.reset());
+        if (this.resetBtn) {
+            this.resetBtn.addEventListener('click', () => this.reset());
+        }
 
         // 推倒按钮
-        this.pushBtn.addEventListener('click', () => this.startDominoEffect());
+        if (this.pushBtn) {
+            this.pushBtn.addEventListener('click', () => this.startDominoEffect());
+        }
 
         // 点击庆祝界面关闭
         this.celebration.addEventListener('click', () => {
