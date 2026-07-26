@@ -9,8 +9,7 @@ class AudioManager {
         this.pitch = 1.2;     // 音调（稍高，更活泼）
         this.volume = 1.0;
         this.voice = null;
-        this.queue = [];
-        this.isSpeaking = false;
+        this.speakTimer = null;  // cancel 后延迟朗读的定时器，新语音到来时作废
         this.AudioContextClass = window.AudioContext || window.webkitAudioContext;
         this.audioCtx = null;
 
@@ -52,7 +51,7 @@ class AudioManager {
     }
 
     /**
-     * 朗读字符
+     * 朗读字符（最新优先：新语音打断旧语音，避免快速操作时发音堆积重叠）
      */
     speak(text, callback) {
         if (!this.enabled || !this.synth) {
@@ -72,34 +71,32 @@ class AudioManager {
         utterance.lang = 'en-US';
 
         utterance.onend = () => {
-            this.isSpeaking = false;
             if (callback) callback();
-            this.processQueue();
         };
 
         utterance.onerror = (e) => {
-            console.error('Speech error:', e);
-            this.isSpeaking = false;
+            // 被打断/取消是预期行为，不算错误
+            if (e.error !== 'canceled' && e.error !== 'interrupted') {
+                console.error('Speech error:', e);
+            }
             if (callback) callback();
-            this.processQueue();
         };
 
-        if (this.isSpeaking) {
-            this.queue.push({ text, callback, utterance });
-        } else {
-            this.isSpeaking = true;
-            this.synth.speak(utterance);
+        // 丢弃还没播出的旧语音
+        if (this.speakTimer) {
+            clearTimeout(this.speakTimer);
+            this.speakTimer = null;
         }
-    }
 
-    /**
-     * 处理语音队列
-     */
-    processQueue() {
-        if (this.queue.length > 0 && !this.isSpeaking) {
-            const next = this.queue.shift();
-            this.isSpeaking = true;
-            this.synth.speak(next.utterance);
+        if (this.synth.speaking || this.synth.pending) {
+            this.synth.cancel();
+            // Chrome 在 cancel 后立即 speak 可能吞掉新语音，延迟一拍再朗读
+            this.speakTimer = setTimeout(() => {
+                this.speakTimer = null;
+                this.synth.speak(utterance);
+            }, 60);
+        } else {
+            this.synth.speak(utterance);
         }
     }
 
@@ -232,18 +229,21 @@ class AudioManager {
     setEnabled(enabled) {
         this.enabled = enabled;
         if (!enabled) {
-            this.synth.cancel();
-            this.queue = [];
+            this.clear();
         }
     }
 
     /**
-     * 清空队列
+     * 停止当前朗读并丢弃待播语音
      */
     clear() {
-        this.synth.cancel();
-        this.queue = [];
-        this.isSpeaking = false;
+        if (this.speakTimer) {
+            clearTimeout(this.speakTimer);
+            this.speakTimer = null;
+        }
+        if (this.synth) {
+            this.synth.cancel();
+        }
     }
 }
 
