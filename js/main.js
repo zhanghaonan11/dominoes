@@ -40,6 +40,13 @@ class DominoGame {
         this.selectedAnimalData = null;
         this.selectedBuilding = null;  // 选中的建筑类型
         this.isAnimating = false;
+        this.pendingTimers = new Set();
+        this.gameRunId = 0;
+        this.canvasWidth = 0;
+        this.canvasHeight = 0;
+        this.canvasDpr = 1;
+        this.lastFrameTime = performance.now();
+        this.trackPointsCache = null;  // 轨道点缓存，骨牌增删或画布变化时失效
 
         // 小球状态
         this.ball = {
@@ -48,7 +55,7 @@ class DominoGame {
             radius: 30,  // 放大1倍 (15 * 2)
             isMoving: false,
             progress: 0,  // 0-1 表示沿轨道的进度
-      path: []      // 路径点
+            path: []      // 路径点
         };
 
         // 初始化组件
@@ -72,6 +79,7 @@ class DominoGame {
         this.createAnimalButtons();
         this.createBuildingButtons();
         this.setupEventListeners();
+        this.setupTestHooks();
         this.gameLoop();
     }
 
@@ -81,13 +89,101 @@ class DominoGame {
     setupCanvas() {
         const container = this.canvas.parentElement;
         const resize = () => {
-            this.canvas.width = container.clientWidth;
-            this.canvas.height = container.clientHeight;
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            const dpr = Math.max(1, window.devicePixelRatio || 1);
+
+            this.canvasWidth = width;
+            this.canvasHeight = height;
+            this.canvasDpr = dpr;
+            this.canvas.width = Math.round(width * dpr);
+            this.canvas.height = Math.round(height * dpr);
+            this.canvas.style.width = width + 'px';
+            this.canvas.style.height = height + 'px';
+            this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            this.invalidateTrackCache();
             this.draw();
         };
 
         resize();
         window.addEventListener('resize', resize);
+    }
+
+    /**
+     * 暴露轻量测试接口，方便浏览器自动化读取状态和推进时间
+     */
+    setupTestHooks() {
+        window.render_game_to_text = () => this.renderGameToText();
+        window.advanceTime = (ms) => this.advanceTime(ms);
+    }
+
+    /**
+     * 用于自动化测试的文本状态快照
+     */
+    renderGameToText() {
+        const payload = {
+            coordinateSystem: 'origin: top-left; x increases right; y increases down; units: CSS pixels',
+            canvas: {
+                width: this.canvasWidth,
+                height: this.canvasHeight,
+                dpr: this.canvasDpr
+            },
+            state: {
+                isAnimating: this.isAnimating,
+                physicsRunning: this.physics.isRunning,
+                celebrationVisible: !this.celebration.hidden
+            },
+            selection: {
+                character: this.selectedCharacter,
+                isNumber: this.selectedIsNumber,
+                isAnimal: this.selectedIsAnimal,
+                animalName: this.selectedAnimalData ? this.selectedAnimalData.name : null,
+                building: this.selectedBuilding
+            },
+            ball: {
+                x: Math.round(this.ball.x),
+                y: Math.round(this.ball.y),
+                radius: this.ball.radius,
+                isMoving: this.ball.isMoving,
+                progress: Number(this.ball.progress.toFixed(3))
+            },
+            dominoes: this.dominoes.map((domino) => ({
+                character: domino.character,
+                x: Math.round(domino.x),
+                y: Math.round(domino.y),
+                width: domino.width,
+                height: domino.height,
+                angle: Number(domino.angle.toFixed(3)),
+                isNumber: domino.isNumber,
+                isAnimal: domino.isAnimal,
+                isFalling: domino.isFalling,
+                hasFallen: domino.hasFallen
+            })),
+            building: this.building ? {
+                type: this.building.type,
+                x: Math.round(this.building.x),
+                y: Math.round(this.building.y),
+                width: this.building.width,
+                height: this.building.height,
+                isExploding: this.building.isExploding,
+                explosionProgress: Number(this.building.explosionProgress.toFixed(3))
+            } : null
+        };
+
+        return JSON.stringify(payload);
+    }
+
+    /**
+     * 自动化测试使用的固定步长推进接口
+     */
+    advanceTime(ms) {
+        const stepMs = 1000 / 60;
+        const steps = Math.max(1, Math.round(ms / stepMs));
+
+        for (let i = 0; i < steps; i++) {
+            this.updateFrame(stepMs);
+        }
+        this.draw();
     }
 
     /**
@@ -185,6 +281,8 @@ class DominoGame {
             if (e.key === 'Escape') {
                 this.clearSelection();
             } else if (e.key === ' ' && !this.isAnimating) {
+                // 焦点在按钮上时空格会触发按钮点击，避免快捷键重复触发
+                if (e.target instanceof HTMLButtonElement) return;
                 e.preventDefault();
                 this.startDominoEffect();
             } else if (e.key === 'r' || e.key === 'R') {
@@ -275,6 +373,10 @@ class DominoGame {
         this.selectedIsAnimal = false;
         this.selectedAnimalData = null;
         this.clearAllSelections();
+
+        if (document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur();
+        }
     }
 
     /**
@@ -295,10 +397,10 @@ class DominoGame {
 
         if (this.selectedBuilding !== null) {
             // 放置建筑
-            this.placeBuilding(x, y);
+            this.placeBuilding();
         } else if (this.selectedCharacter !== null) {
             // 放置新骨牌
-            this.placeDomino(x, y);
+            this.placeDomino();
         }
     }
 
@@ -340,6 +442,7 @@ class DominoGame {
         for (let i = this.dominoes.length - 1; i >= 0; i--) {
             if (this.dominoes[i].containsPoint(x, y)) {
                 this.dominoes.splice(i, 1);
+                this.invalidateTrackCache();
                 this.draw();
                 break;
             }
@@ -347,9 +450,9 @@ class DominoGame {
     }
 
     /**
-     * 放置骨牌
+     * 放置骨牌（位置自动排列：底部贴地、从左到右依次排开，与点击坐标无关）
      */
-    placeDomino(x, y) {
+    placeDomino() {
         // 根据已放置骨牌数量计算递增尺寸
         const count = this.dominoes.length;
         const growthFactor = 1 + count * 0.08;  // 每个骨牌增大8%
@@ -360,12 +463,13 @@ class DominoGame {
         };
 
         // 骨牌底部自动对齐到画布底部
-        y = this.canvas.height - 80;
+        const y = this.canvasHeight - 80;
 
         // 水平位置：根据已有骨牌动态计算，保持合适间距
         const startX = 80;
         const baseSpacing = 15;  // 骨牌之间的基础间隙
 
+        let x;
         if (count === 0) {
             x = startX;
         } else {
@@ -388,22 +492,23 @@ class DominoGame {
         );
 
         this.dominoes.push(domino);
+        this.invalidateTrackCache();
         this.audio.playSound('click');
         this.draw();
     }
 
     /**
-     * 放置建筑
+     * 放置建筑（自动放在最后一个骨牌右边，与点击坐标无关）
      */
-    placeBuilding(x, y) {
-        // 建筑放在最后一个骨牌的右边
-        y = this.canvas.height - 80;
+    placeBuilding() {
+        const y = this.canvasHeight - 80;
+        let x;
 
         if (this.dominoes.length > 0) {
             const lastDomino = this.dominoes[this.dominoes.length - 1];
             x = lastDomino.x + lastDomino.width / 2 + 60;
         } else {
-            x = this.canvas.width - 150;
+            x = this.canvasWidth - 150;
         }
 
         this.building = new Building(x, y, this.selectedBuilding);
@@ -422,6 +527,7 @@ class DominoGame {
 
         // 按位置排序骨牌
         this.dominoes.sort((a, b) => a.x - b.x);
+        this.invalidateTrackCache();
 
         // 先让小球开始移动
         this.ball.isMoving = true;
@@ -432,6 +538,30 @@ class DominoGame {
     }
 
     /**
+     * 安排可在重置时统一取消的定时任务
+     */
+    scheduleTimer(callback, delay) {
+        const runId = this.gameRunId;
+        const timerId = setTimeout(() => {
+            this.pendingTimers.delete(timerId);
+            if (runId !== this.gameRunId) return;
+            callback();
+        }, delay);
+
+        this.pendingTimers.add(timerId);
+        return timerId;
+    }
+
+    /**
+     * 清理所有未执行的定时任务，并让旧回调失效
+     */
+    clearScheduledTimers() {
+        this.gameRunId += 1;
+        this.pendingTimers.forEach((timerId) => clearTimeout(timerId));
+        this.pendingTimers.clear();
+    }
+
+    /**
      * 骨牌倒下时的回调
      */
     onDominoFall(domino, index) {
@@ -439,7 +569,7 @@ class DominoGame {
         this.audio.playSound('fall');
 
         // 延迟朗读字符
-        setTimeout(() => {
+        this.scheduleTimer(() => {
             this.audio.speakDomino(domino);
         }, 100);
 
@@ -450,7 +580,7 @@ class DominoGame {
 
             // 如果有建筑，延迟触发建筑爆炸
             if (this.building) {
-                setTimeout(() => {
+                this.scheduleTimer(() => {
                     this.triggerBuildingExplosion();
                 }, 500);
             }
@@ -465,18 +595,20 @@ class DominoGame {
         container.classList.add('screen-shake');
 
         // 动画结束后移除类
-        setTimeout(() => {
+        this.scheduleTimer(() => {
             container.classList.remove('screen-shake');
         }, 600);
     }
 
     /**
-     * 触发建筑爆炸
+     * 触发建筑爆炸（幂等：埃菲尔铁塔不爆炸也只触发一次，避免每帧重复播音效）
      */
     triggerBuildingExplosion() {
-        if (this.building && !this.building.isExploding) {
+        if (this.building && !this.building.explosionTriggered) {
             this.building.startExplosion();
-            this.audio.playSound('celebrate');
+            if (this.building.isExploding) {
+                this.audio.playSound('celebrate');
+            }
         }
     }
 
@@ -487,7 +619,10 @@ class DominoGame {
         // 如果有建筑且正在爆炸，等爆炸结束
         if (this.building && this.building.isExploding) {
             // 等待爆炸动画
+            const runId = this.gameRunId;
             const checkExplosion = () => {
+                if (runId !== this.gameRunId || !this.building) return;
+
                 if (this.building.isExplosionComplete()) {
                     this.showCelebration();
                 } else {
@@ -498,7 +633,7 @@ class DominoGame {
         } else if (this.building) {
             // 触发爆炸
             this.triggerBuildingExplosion();
-            setTimeout(() => this.showCelebration(), 1500);
+            this.scheduleTimer(() => this.showCelebration(), 1500);
         } else {
             this.showCelebration();
         }
@@ -510,16 +645,16 @@ class DominoGame {
     showCelebration() {
         this.isAnimating = false;
 
-        setTimeout(() => {
+        this.scheduleTimer(() => {
             this.celebration.hidden = false;
             this.audio.playSound('celebrate');
 
-            setTimeout(() => {
+            this.scheduleTimer(() => {
                 this.audio.speakCelebration();
             }, 500);
 
             // 3秒后自动重置游戏
-            setTimeout(() => {
+            this.scheduleTimer(() => {
                 this.reset();
             }, 3000);
         }, 300);
@@ -529,11 +664,15 @@ class DominoGame {
      * 重置游戏
      */
     reset() {
+        this.clearScheduledTimers();
         this.isAnimating = false;
         this.physics.reset();
         this.dominoes = [];
         this.building = null;
+        this.invalidateTrackCache();
+        this.clearSelection();
         this.celebration.hidden = true;
+        this.canvas.parentElement.classList.remove('screen-shake');
         this.audio.clear();
         this.resetBall();
         this.draw();
@@ -542,10 +681,24 @@ class DominoGame {
     /**
      * 游戏主循环
      */
-    gameLoop() {
+    gameLoop(currentTime = performance.now()) {
+        const deltaTime = Math.min(1000 / 30, Math.max(0, currentTime - this.lastFrameTime));
+        this.lastFrameTime = currentTime;
+
+        this.updateFrame(deltaTime || 1000 / 60);
+        this.draw();
+
+        // 继续循环
+        requestAnimationFrame((time) => this.gameLoop(time));
+    }
+
+    /**
+     * 推进一帧游戏状态
+     */
+    updateFrame(deltaTime = 1000 / 60) {
         // 更新小球
         if (this.ball.isMoving) {
-            const ballReached = this.updateBall();
+            const ballReached = this.updateBall(deltaTime);
             if (ballReached) {
                 // 小球到达第一个骨牌，开始推倒
                 this.physics.start();
@@ -555,7 +708,7 @@ class DominoGame {
 
         // 更新物理
         if (this.isAnimating) {
-            this.physics.update();
+            this.physics.update(deltaTime);
 
             // 检查最后一个骨牌是否碰到建筑
             if (this.building && this.dominoes.length > 0) {
@@ -566,11 +719,10 @@ class DominoGame {
             }
         }
 
-        // 绘制
-        this.draw();
-
-        // 继续循环
-        requestAnimationFrame(() => this.gameLoop());
+        // 推进建筑爆炸动画（状态更新与绘制解耦）
+        if (this.building) {
+            this.building.update(deltaTime);
+        }
     }
 
     /**
@@ -578,7 +730,7 @@ class DominoGame {
      */
     draw() {
         // 清空画布
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
 
         // 绘制背景网格
         this.drawGrid();
@@ -615,33 +767,31 @@ class DominoGame {
 
         const gridSize = 50;
 
-        for (let x = 0; x < this.canvas.width; x += gridSize) {
-            this.ctx.beginPath();
+        // 所有网格线合并为一条路径，一次 stroke
+        this.ctx.beginPath();
+        for (let x = 0; x < this.canvasWidth; x += gridSize) {
             this.ctx.moveTo(x, 0);
-            this.ctx.lineTo(x, this.canvas.height);
-            this.ctx.stroke();
+            this.ctx.lineTo(x, this.canvasHeight);
         }
-
-        for (let y = 0; y < this.canvas.height; y += gridSize) {
-            this.ctx.beginPath();
+        for (let y = 0; y < this.canvasHeight; y += gridSize) {
             this.ctx.moveTo(0, y);
-            this.ctx.lineTo(this.canvas.width, y);
-            this.ctx.stroke();
+            this.ctx.lineTo(this.canvasWidth, y);
         }
+        this.ctx.stroke();
     }
 
     /**
      * 绘制地面
      */
     drawGround() {
-        const groundY = this.canvas.height - 80;
+        const groundY = this.canvasHeight - 80;
 
         this.ctx.strokeStyle = '#c9a227';
         this.ctx.lineWidth = 3;
         this.ctx.setLineDash([10, 5]);
         this.ctx.beginPath();
         this.ctx.moveTo(0, groundY);
-        this.ctx.lineTo(this.canvas.width, groundY);
+        this.ctx.lineTo(this.canvasWidth, groundY);
         this.ctx.stroke();
         this.ctx.setLineDash([]);
     }
@@ -663,7 +813,7 @@ class DominoGame {
             hint = '点击放置建筑 "' + buildingName + '"';
         }
 
-        this.ctx.fillText(hint, this.canvas.width / 2, 30);
+        this.ctx.fillText(hint, this.canvasWidth / 2, 30);
     }
 
     /**
@@ -715,40 +865,31 @@ class DominoGame {
         const trackPoints = this.getTrackPoints();
         if (trackPoints.length === 0) return;
 
-        // 绘制轨道
+        // 同一条折线要按三种样式描边，构建一次 Path2D 复用
+        const trackPath = new Path2D();
+        trackPath.moveTo(trackPoints[0].x, trackPoints[0].y);
+        for (let i = 1; i < trackPoints.length; i++) {
+            trackPath.lineTo(trackPoints[i].x, trackPoints[i].y);
+        }
+
         this.ctx.save();
-        this.ctx.strokeStyle = 'rgba(255, 200, 100, 0.3)';
-        this.ctx.lineWidth = 6;
         this.ctx.lineCap = 'round';
         this.ctx.lineJoin = 'round';
 
         // 绘制轨道主线
-        this.ctx.beginPath();
-        this.ctx.moveTo(trackPoints[0].x, trackPoints[0].y);
-        for (let i = 1; i < trackPoints.length; i++) {
-            this.ctx.lineTo(trackPoints[i].x, trackPoints[i].y);
-        }
-        this.ctx.stroke();
+        this.ctx.strokeStyle = 'rgba(255, 200, 100, 0.3)';
+        this.ctx.lineWidth = 6;
+        this.ctx.stroke(trackPath);
 
         // 绘制轨道边框（模拟过山车轨道）
         this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
         this.ctx.lineWidth = 10;
-        this.ctx.beginPath();
-        this.ctx.moveTo(trackPoints[0].x, trackPoints[0].y);
-        for (let i = 1; i < trackPoints.length; i++) {
-            this.ctx.lineTo(trackPoints[i].x, trackPoints[i].y);
-        }
-        this.ctx.stroke();
+        this.ctx.stroke(trackPath);
 
         // 重新绘制中心线
         this.ctx.strokeStyle = '#daa520';
         this.ctx.lineWidth = 4;
-        this.ctx.beginPath();
-        this.ctx.moveTo(trackPoints[0].x, trackPoints[0].y);
-        for (let i = 1; i < trackPoints.length; i++) {
-            this.ctx.lineTo(trackPoints[i].x, trackPoints[i].y);
-        }
-        this.ctx.stroke();
+        this.ctx.stroke(trackPath);
 
         // 绘制轨道支撑点
         this.ctx.fillStyle = '#b8860b';
@@ -762,22 +903,30 @@ class DominoGame {
     }
 
     /**
-     * 生成之字形轨道路径点 - 左右来回倾斜下降
+     * 使轨道点缓存失效（骨牌增删、排序或画布尺寸变化时调用）
+     */
+    invalidateTrackCache() {
+        this.trackPointsCache = null;
+    }
+
+    /**
+     * 生成之字形轨道路径点 - 左右来回倾斜下降（结果缓存，避免每帧重算）
      */
     getTrackPoints() {
         if (this.dominoes.length === 0) return [];
+        if (this.trackPointsCache) return this.trackPointsCache;
 
         const points = [];
         const startX = 50;
         const startY = 50;
-        const groundY = this.canvas.height - 80;
+        const groundY = this.canvasHeight - 80;
         const firstDomino = this.dominoes[0];
         const endX = firstDomino.x;
         const endY = groundY - 10;
 
         // 屏幕边界
         const leftBound = 30;
-        const rightBound = this.canvas.width - 30;
+        const rightBound = this.canvasWidth - 30;
 
         // 之字形参数：2次弯折
         const zigzags = 2;
@@ -820,19 +969,20 @@ class DominoGame {
         // 添加最后一个点
         points.push(keyPoints[keyPoints.length - 1]);
 
+        this.trackPointsCache = points;
         return points;
     }
 
     /**
      * 更新小球位置 - 沿过山车轨道移动
      */
-    updateBall() {
+    updateBall(deltaTime = 1000 / 60) {
         if (!this.ball.isMoving || this.dominoes.length === 0) return false;
 
         const trackPoints = this.getTrackPoints();
         if (trackPoints.length === 0) return false;
 
-        this.ball.progress += 0.002;  // 速度再减慢2倍
+        this.ball.progress += 0.002 * (deltaTime / (1000 / 60));  // 速度再减慢2倍
 
         if (this.ball.progress >= 1) {
             this.ball.progress = 1;

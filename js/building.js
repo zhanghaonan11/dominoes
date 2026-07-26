@@ -1,95 +1,37 @@
 /**
  * 建筑类 - 知名建筑物
  */
+
+// 建筑配置（唯一数据源，按钮列表和实例都从这里取）
+const BUILDING_SCALE = 1.5;
+const BUILDING_CONFIGS = {
+    pisa: { name: '比萨斜塔', emoji: '🗼', width: 60, height: 120, color: '#f5deb3' },
+    eiffel: { name: '埃菲尔铁塔', emoji: '🗼', width: 70, height: 140, color: '#4a4a4a' },
+    liberty: { name: '自由女神', emoji: '🗽', width: 60, height: 130, color: '#90EE90' },
+    bigben: { name: '大本钟', emoji: '🕰️', width: 50, height: 120, color: '#8B4513' },
+    pyramid: { name: '金字塔', emoji: '🔺', width: 100, height: 80, color: '#DAA520' },
+    taj: { name: '泰姬陵', emoji: '🕌', width: 80, height: 100, color: '#FFFAFA' },
+    colosseum: { name: '罗马斗兽场', emoji: '🏟️', width: 90, height: 70, color: '#D2B48C' },
+    greatwall: { name: '长城', emoji: '🏯', width: 100, height: 60, color: '#808080' },
+    sydney: { name: '悉尼歌剧院', emoji: '🎭', width: 90, height: 70, color: '#F5F5F5' },
+    christ: { name: '救世基督像', emoji: '✝️', width: 70, height: 110, color: '#E8E8E8' }
+};
+
 class Building {
     constructor(x, y, type) {
         this.x = x;
         this.y = y;
         this.type = type;
 
-        // 建筑配置 (尺寸放大1.5倍)
-        const scale = 1.5;
-        const buildings = {
-            'pisa': {
-                name: '比萨斜塔',
-                emoji: '🗼',
-                width: 60 * scale,
-                height: 120 * scale,
-                color: '#f5deb3'
-            },
-            'eiffel': {
-                name: '埃菲尔铁塔',
-                emoji: '🗼',
-                width: 70 * scale,
-                height: 140 * scale,
-                color: '#4a4a4a'
-            },
-            'liberty': {
-                name: '自由女神',
-                emoji: '🗽',
-                width: 60 * scale,
-                height: 130 * scale,
-                color: '#90EE90'
-            },
-            'bigben': {
-                name: '大本钟',
-                emoji: '🕰️',
-                width: 50 * scale,
-                height: 120 * scale,
-                color: '#8B4513'
-            },
-            'pyramid': {
-                name: '金字塔',
-                emoji: '🔺',
-                width: 100 * scale,
-                height: 80 * scale,
-                color: '#DAA520'
-            },
-            'taj': {
-                name: '泰姬陵',
-                emoji: '🕌',
-                width: 80 * scale,
-                height: 100 * scale,
-                color: '#FFFAFA'
-            },
-            'colosseum': {
-                name: '罗马斗兽场',
-                emoji: '🏟️',
-                width: 90 * scale,
-                height: 70 * scale,
-                color: '#D2B48C'
-            },
-            'greatwall': {
-                name: '长城',
-                emoji: '🏯',
-                width: 100 * scale,
-                height: 60 * scale,
-                color: '#808080'
-            },
-            'sydney': {
-                name: '悉尼歌剧院',
-                emoji: '🎭',
-                width: 90 * scale,
-                height: 70 * scale,
-                color: '#F5F5F5'
-            },
-            'christ': {
-                name: '救世基督像',
-                emoji: '✝️',
-                width: 70 * scale,
-                height: 110 * scale,
-                color: '#E8E8E8'
-            }
-        };
-
-        const config = buildings[type] || buildings['pisa'];
+        const config = BUILDING_CONFIGS[type] || BUILDING_CONFIGS.pisa;
         this.name = config.name;
         this.emoji = config.emoji;
-        this.width = config.width;
-        this.height = config.height;
+        this.width = config.width * BUILDING_SCALE;
+        this.height = config.height * BUILDING_SCALE;
         this.color = config.color;
 
         // 状态
+        this.explosionTriggered = false;  // 已请求过爆炸（含埃菲尔这种不爆炸的情况）
         this.isExploding = false;
         this.explosionProgress = 0;
         this.particles = [];
@@ -102,8 +44,8 @@ class Building {
      */
     draw(ctx) {
         // 保存画布尺寸用于全屏爆炸
-        this.canvasWidth = ctx.canvas.width;
-        this.canvasHeight = ctx.canvas.height;
+        this.canvasWidth = ctx.canvas.clientWidth || ctx.canvas.width;
+        this.canvasHeight = ctx.canvas.clientHeight || ctx.canvas.height;
 
         if (this.isExploding) {
             this.drawExplosion(ctx);
@@ -178,7 +120,8 @@ class Building {
      * 开始爆炸效果 - 全屏效果
      */
     startExplosion() {
-        if (this.isExploding) return;
+        if (this.explosionTriggered) return;
+        this.explosionTriggered = true;
 
         // 埃菲尔铁塔不发生爆炸
         if (this.type === 'eiffel') return;
@@ -233,6 +176,26 @@ class Building {
     }
 
     /**
+     * 推进爆炸动画状态（与绘制解耦，按真实耗时缩放）
+     */
+    update(deltaTime = 1000 / 60) {
+        if (!this.isExploding) return;
+
+        const frames = deltaTime / (1000 / 60);
+
+        this.particles = this.particles.filter(p => {
+            p.x += p.vx * frames;
+            p.y += p.vy * frames;
+            p.vy += 0.15 * frames; // 较轻的重力
+            p.rotation += p.rotationSpeed * frames;
+            p.life -= p.decay * frames;
+            return p.life > 0;
+        });
+
+        this.explosionProgress += 0.015 * frames;
+    }
+
+    /**
      * 绘制爆炸效果 - 全屏
      */
     drawExplosion(ctx) {
@@ -245,18 +208,8 @@ class Building {
             ctx.fillRect(0, 0, this.canvasWidth, this.canvasHeight);
         }
 
-        // 更新和绘制粒子（使用绝对坐标）
-        this.particles = this.particles.filter(p => {
-            // 更新位置
-            p.x += p.vx;
-            p.y += p.vy;
-            p.vy += 0.15; // 较轻的重力
-            p.rotation += p.rotationSpeed;
-            p.life -= p.decay;
-
-            if (p.life <= 0) return false;
-
-            // 绘制粒子
+        // 绘制粒子（使用绝对坐标）
+        this.particles.forEach(p => {
             ctx.save();
             ctx.translate(p.x, p.y);
             ctx.rotate(p.rotation);
@@ -275,7 +228,6 @@ class Building {
             }
 
             ctx.restore();
-            return true;
         });
 
         // 绘制多个中心闪光点
@@ -307,8 +259,6 @@ class Building {
                 ctx.stroke();
             });
         }
-
-        this.explosionProgress += 0.015;
 
         ctx.restore();
     }
@@ -384,19 +334,12 @@ class Building {
     }
 }
 
-// 建筑类型列表
-Building.TYPES = [
-    { id: 'pisa', name: '比萨斜塔', emoji: '🗼' },
-    { id: 'eiffel', name: '埃菲尔铁塔', emoji: '🗼' },
-    { id: 'liberty', name: '自由女神', emoji: '🗽' },
-    { id: 'bigben', name: '大本钟', emoji: '🕰️' },
-    { id: 'pyramid', name: '金字塔', emoji: '🔺' },
-    { id: 'taj', name: '泰姬陵', emoji: '🕌' },
-    { id: 'colosseum', name: '斗兽场', emoji: '🏟️' },
-    { id: 'greatwall', name: '长城', emoji: '🏯' },
-    { id: 'sydney', name: '悉尼歌剧院', emoji: '🎭' },
-    { id: 'christ', name: '基督像', emoji: '✝️' }
-];
+// 建筑类型列表（从配置派生，保证按钮与画布显示一致）
+Building.TYPES = Object.entries(BUILDING_CONFIGS).map(([id, config]) => ({
+    id,
+    name: config.name,
+    emoji: config.emoji
+}));
 
 // 导出
 if (typeof module !== 'undefined' && module.exports) {

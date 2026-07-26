@@ -54,12 +54,16 @@ class PhysicsEngine {
     /**
      * 更新物理状态
      */
-    update() {
+    update(deltaTime = null) {
         if (!this.isRunning) return;
 
-        const currentTime = performance.now();
-        const deltaTime = currentTime - this.lastTime;
-        this.lastTime = currentTime;
+        if (deltaTime === null) {
+            const currentTime = performance.now();
+            deltaTime = currentTime - this.lastTime;
+            this.lastTime = currentTime;
+        } else {
+            this.lastTime = performance.now();
+        }
 
         let allFallen = true;
         let anyFalling = false;
@@ -99,60 +103,6 @@ class PhysicsEngine {
                 this.onComplete();
             }
         }
-    }
-
-    /**
-     * 按位置排序骨牌（从左到右）
-     */
-    sortDominoesByPosition() {
-        this.dominoes.sort((a, b) => a.x - b.x);
-    }
-
-    /**
-     * 计算两个骨牌之间是否能产生连锁反应
-     */
-    canChainReaction(domino1, domino2) {
-        const distance = Math.abs(domino2.x - domino1.x);
-        const maxReach = domino1.height * 0.9;  // 骨牌倒下能触及的最大距离
-        return distance < maxReach;
-    }
-
-    /**
-     * 验证骨牌排列是否能产生完整的多米诺效应
-     */
-    validateChain() {
-        if (this.dominoes.length < 2) return true;
-
-        this.sortDominoesByPosition();
-
-        for (let i = 0; i < this.dominoes.length - 1; i++) {
-            if (!this.canChainReaction(this.dominoes[i], this.dominoes[i + 1])) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
-     * 获取断链位置
-     */
-    getBreakPoints() {
-        const breakPoints = [];
-        if (this.dominoes.length < 2) return breakPoints;
-
-        this.sortDominoesByPosition();
-
-        for (let i = 0; i < this.dominoes.length - 1; i++) {
-            if (!this.canChainReaction(this.dominoes[i], this.dominoes[i + 1])) {
-                breakPoints.push({
-                    index: i,
-                    domino1: this.dominoes[i],
-                    domino2: this.dominoes[i + 1],
-                    distance: Math.abs(this.dominoes[i + 1].x - this.dominoes[i].x)
-                });
-            }
-        }
-        return breakPoints;
     }
 }
 

@@ -140,11 +140,14 @@ class Domino {
     /**
      * 更新物理状态
      */
-    update(deltaTime) {
+    update(deltaTime = 1000 / 60) {
         if (this.isFalling && !this.hasFallen) {
+            // 以 60fps 为基准帧缩放，保证不同刷新率下倒下速度一致
+            const frames = deltaTime / (1000 / 60);
+
             // 增加角速度（重力加速效果）
-            this.angularVelocity += 0.003 * this.fallDirection;
-            this.angle += this.angularVelocity;
+            this.angularVelocity += 0.003 * this.fallDirection * frames;
+            this.angle += this.angularVelocity * frames;
 
             // 检查是否倒下完成（约90度）
             const maxAngle = Math.PI / 2 * 0.95;
@@ -205,21 +208,6 @@ class Domino {
         this.angularVelocity = 0;
         this.isFalling = false;
         this.hasFallen = false;
-    }
-
-    /**
-     * 创建骨牌副本
-     */
-    clone() {
-        return new Domino(
-            this.x,
-            this.y,
-            this.character,
-            this.isNumber,
-            { width: this.width, height: this.height },
-            this.isAnimal,
-            this.animalData
-        );
     }
 }
 

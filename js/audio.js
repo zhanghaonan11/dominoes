@@ -11,6 +11,8 @@ class AudioManager {
         this.voice = null;
         this.queue = [];
         this.isSpeaking = false;
+        this.AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        this.audioCtx = null;
 
         this.initVoice();
     }
@@ -19,12 +21,13 @@ class AudioManager {
      * 初始化语音
      */
     initVoice() {
-        // 等待语音列表加载
-        if (this.synth.onvoiceschanged !== undefined) {
+        if (!this.synth) return;
+
+        // 部分浏览器语音列表异步加载，加载完成后重新选择
+        if ('onvoiceschanged' in this.synth) {
             this.synth.onvoiceschanged = () => this.selectVoice();
         }
-        // 尝试立即选择
-        setTimeout(() => this.selectVoice(), 100);
+        this.selectVoice();
     }
 
     /**
@@ -45,7 +48,7 @@ class AudioManager {
             v.name.toLowerCase().includes('victoria')
         ) || englishVoices[0] || voices[0];
 
-        console.log('Selected voice:', this.voice?.name);
+        console.debug('Selected voice:', this.voice?.name);
     }
 
     /**
@@ -56,9 +59,6 @@ class AudioManager {
             if (callback) callback();
             return;
         }
-
-        // 取消之前的语音
-        // this.synth.cancel();
 
         const utterance = new SpeechSynthesisUtterance(text);
 
@@ -161,7 +161,9 @@ class AudioManager {
      */
     playSound(type) {
         try {
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const audioCtx = this.getAudioContext();
+            if (!audioCtx) return;
+
             const oscillator = audioCtx.createOscillator();
             const gainNode = audioCtx.createGain();
 
@@ -205,6 +207,23 @@ class AudioManager {
         } catch (e) {
             console.log('Audio not supported:', e);
         }
+    }
+
+    /**
+     * 复用同一个 AudioContext，避免频繁创建上下文
+     */
+    getAudioContext() {
+        if (!this.AudioContextClass) return null;
+
+        if (!this.audioCtx || this.audioCtx.state === 'closed') {
+            this.audioCtx = new this.AudioContextClass();
+        }
+
+        if (this.audioCtx.state === 'suspended') {
+            this.audioCtx.resume();
+        }
+
+        return this.audioCtx;
     }
 
     /**
